@@ -1121,13 +1121,23 @@ tds71_do_login(TDSSOCKET * tds, TDSLOGIN* login)
 	tds_put_n(tds, buf, start_pos);
 	/* netlib version */
 	tds_put_n(tds, IS_TDS72_PLUS(tds->conn) ? netlib9 : netlib8, 6);
-	/* encryption */
-#if !defined(HAVE_GNUTLS) && !defined(HAVE_OPENSSL)
-	/* not supported */
-	tds_put_byte(tds, 2);
-#else
-	tds_put_byte(tds, login->encryption_level >= TDS_ENCRYPTION_REQUIRE ? 1 : 0);
-#endif
+
+    if(login->encryption_enabled)
+    {
+        /* encryption */
+    #if !defined(HAVE_GNUTLS) && !defined(HAVE_OPENSSL)
+        /* not supported */
+        tds_put_byte(tds, 2);
+    #else
+        tds_put_byte(tds, login->encryption_level >= TDS_ENCRYPTION_REQUIRE ? 1 : 0);
+    #endif
+    }
+    else
+    {
+        /* Disabled */
+        tds_put_byte(tds, 2);
+    }
+
 	/* instance */
 	tds_put_n(tds, instance_name, instance_name_len);
 	/* pid */

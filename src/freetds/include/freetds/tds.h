@@ -567,6 +567,7 @@ typedef struct tds_login
 	DSTR new_password;	    	/**< new password to set (TDS 7.2+) */
 
 	DSTR library;	/* Ct-Library, DB-Library,  TDS-Library or ODBC */
+    TDS_TINYINT encryption_enabled;
 	TDS_TINYINT encryption_level;
 
 	TDS_INT query_timeout;

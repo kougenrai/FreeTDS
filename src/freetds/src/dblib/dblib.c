@@ -924,6 +924,8 @@ dbsetlbool(LOGINREC * login, int value, int which)
         login->tds_login->use_ntlmv2_specified = 1;
 		return SUCCEED;
 	case DBSETENCRYPT:
+        login->tds_login->encryption_enabled = value;
+        return SUCCEED;
 	case DBSETLABELED:
 	default:
 		tdsdump_log(TDS_DBG_FUNC, "UNIMPLEMENTED dbsetlbool() which = %d\n", which);
