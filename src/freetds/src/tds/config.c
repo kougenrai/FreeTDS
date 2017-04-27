@@ -771,6 +771,8 @@ tds_config_login(TDSLOGIN * connection, TDSLOGIN * login)
         connection->use_ntlmv2 = login->use_ntlmv2;
     }
 
+    connection->encryption_enabled = login->encryption_enabled;
+
 	if (res)
 		res = tds_dstr_dup(&connection->new_password, &login->new_password);
 
