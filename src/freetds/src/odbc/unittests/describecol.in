@@ -740,7 +740,7 @@ if tds50
 
 	set DESC_PRECISION 2
 	set DESC_SCALE 2
-	select bigdatetime '2011-08-06 12:34:56.543'
+	select bigdatetime """'2011-08-06 12:34:56.543'"""
 	attr SQL_DESC_SCALE 6
 	attr SQL_DESC_LENGTH 26
 	attr SQL_DESC_PRECISION 6
@@ -749,6 +749,28 @@ if tds50
 	attr SQL_DESC_TYPE_NAME bigdatetime
 	attr SQL_DESC_OCTET_LENGTH 16
 	attr SQL_DESC_DISPLAY_SIZE 26
+
+	# these types resemble more MS driver than Sybase one
+	# to be coherent with NVARCHAR
+	select univarchar(30) 'test123'
+	attr SQL_DESC_SCALE 0
+	attr SQL_DESC_PRECISION 30
+	attr SQL_DESC_LENGTH 30
+	attr SQL_DESC_CONCISE_TYPE SQL_WVARCHAR
+	attr SQL_DESC_TYPE SQL_WVARCHAR
+	attr SQL_DESC_TYPE_NAME univarchar
+	attr SQL_DESC_OCTET_LENGTH 60
+	attr SQL_DESC_DISPLAY_SIZE 30
+
+	select unichar(30) 'test123'
+	attr SQL_DESC_SCALE 0
+	attr SQL_DESC_PRECISION 30
+	attr SQL_DESC_LENGTH 30
+	attr SQL_DESC_CONCISE_TYPE SQL_WCHAR
+	attr SQL_DESC_TYPE SQL_WCHAR
+	attr SQL_DESC_TYPE_NAME unichar
+	attr SQL_DESC_OCTET_LENGTH 60
+	attr SQL_DESC_DISPLAY_SIZE 30
 endif
 
 # some additional tests using ARD

@@ -324,6 +324,16 @@ data_generic_set_type_info(TDSCOLUMN * col, struct _drecord *drec, SQLINTEGER od
 		SET_INFO("binary", "0x", "");
 
 	case SYBLONGBINARY:
+		if (col->column_usertype == USER_UNICHAR_TYPE) {
+			drec->sql_desc_concise_type = SQL_WCHAR;
+			drec->sql_desc_display_size = col->on_server.column_size / 2;
+			SET_INFO2("unichar", "'", "'", col->on_server.column_size / 2);
+		}
+		if (col->column_usertype == USER_UNIVARCHAR_TYPE) {
+			drec->sql_desc_concise_type = SQL_WVARCHAR;
+			drec->sql_desc_display_size = col->on_server.column_size / 2;
+			SET_INFO2("univarchar", "'", "'", col->on_server.column_size / 2);
+		}
 	case SYBIMAGE:
 		drec->sql_desc_concise_type = SQL_LONGVARBINARY;
 		drec->sql_desc_display_size = col->column_size * 2;
@@ -374,8 +384,41 @@ data_generic_set_type_info(TDSCOLUMN * col, struct _drecord *drec, SQLINTEGER od
 		drec->sql_desc_octet_length = drec->sql_desc_length =
 			SQL_SS_LENGTH_UNLIMITED;
 		SET_INFO("xml", "'", "'");
+	/* types already handled in other types, just to silent warnings */
+	case SYBNUMERIC:
+	case SYBDECIMAL:
+	case SYBVARIANT:
+	case SYBMSDATE:
+	case SYBMSTIME:
+	case SYBMSDATETIME2:
+	case SYBMSDATETIMEOFFSET:
+	case SYB5BIGDATETIME:
+	case SYB5BIGTIME:
+		break;
 	}
 	SET_INFO("", "", "");
+}
+
+static void
+data_sybblob_set_type_info(TDSCOLUMN * col, struct _drecord *drec, SQLINTEGER odbc_ver)
+{
+	switch (col->blob_type) {
+	case BLOB_TYPE_CHAR:
+		drec->sql_desc_concise_type = SQL_LONGVARCHAR;
+		drec->sql_desc_display_size = col->on_server.column_size;
+		SET_INFO("text", "'", "'");
+
+	default:
+	case BLOB_TYPE_BINARY:
+		drec->sql_desc_concise_type = SQL_LONGVARBINARY;
+		drec->sql_desc_display_size = col->column_size * 2;
+		SET_INFO("image", "0x", "");
+
+	case BLOB_TYPE_UNICHAR:
+		drec->sql_desc_concise_type = SQL_WLONGVARCHAR;
+		drec->sql_desc_display_size = col->on_server.column_size / 2;
+		SET_INFO2("unitext", "'", "'", col->on_server.column_size / 2);
+	}
 }
 
 void
@@ -406,3 +449,4 @@ TDS_DEFINE_FUNCS(variant);
 TDS_DEFINE_FUNCS(msdatetime);
 TDS_DEFINE_FUNCS(clrudt);
 TDS_DEFINE_FUNCS(sybbigtime);
+TDS_DEFINE_FUNCS(sybblob);

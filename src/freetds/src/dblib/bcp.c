@@ -1173,12 +1173,10 @@ _bcp_read_hostfile(DBPROCESS * dbproc, FILE * hostfile, int *row_error)
 		if (!data_is_null && hostcol->column_len >= 0) {
 			if (hostcol->column_len == 0)
 				data_is_null = 1;
-			else {
-				if (collen)
-					collen = (hostcol->column_len < collen) ? hostcol->column_len : collen;
-				else
-					collen = hostcol->column_len;
-			}
+			else if (collen)
+				collen = (hostcol->column_len < collen) ? hostcol->column_len : collen;
+			else
+				collen = hostcol->column_len;
 		}
 
 		tdsdump_log(TDS_DBG_FUNC, "prefix_len = %d collen = %d \n", hostcol->prefix_len, collen);
@@ -1243,7 +1241,7 @@ _bcp_read_hostfile(DBPROCESS * dbproc, FILE * hostfile, int *row_error)
 			 */
 		} else {	/* unterminated field */
 
-			coldata = tds_new(TDS_UCHAR, 1 + collen);
+			coldata = tds_new(TDS_CHAR, 1 + collen);
 			if (coldata == NULL) {
 				*row_error = TRUE;
 				dbperror(dbproc, SYBEMEM, errno);
@@ -1254,9 +1252,9 @@ _bcp_read_hostfile(DBPROCESS * dbproc, FILE * hostfile, int *row_error)
 			if (collen) {
 				/* 
 				 * Read and convert the data
-				 * TODO: Call tds_iconv_fread() instead of fread(3).  
+				 * TODO: Call tds_bcp_fread() instead of fread(3).
 				 *       The columns should each have their iconv cd set, and noncharacter data
-				 *       should have -1 as the iconv cd, causing tds_iconv_fread() to not attempt
+				 *       should have -1 as the iconv cd, causing tds_bcp_fread() to not attempt
 				 * 	 any conversion.  We do not need a datatype switch here to decide what to do.  
 				 *	 As of 0.62, this *should* actually work.  All that remains is to change the
 				 *	 call and test it. 
@@ -1293,7 +1291,7 @@ _bcp_read_hostfile(DBPROCESS * dbproc, FILE * hostfile, int *row_error)
 				}
 
 				/* trim trailing blanks from character data */
-				if (desttype == SYBCHAR || desttype == SYBVARCHAR) {
+				if (is_ascii_type(bcpcol->on_server.column_type)) {
 					/* A single NUL byte indicates an empty string. */
 					if (bcpcol->bcp_column_data->datalen == 1
 					    && bcpcol->bcp_column_data->data[0] == '\0') {

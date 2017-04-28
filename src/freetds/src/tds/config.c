@@ -73,6 +73,7 @@
 #include <freetds/tds.h>
 #include <freetds/configs.h>
 #include <freetds/string.h>
+#include <freetds/utils.h>
 #include "replacements.h"
 
 static int tds_config_login(TDSLOGIN * connection, TDSLOGIN * login);
@@ -254,6 +255,9 @@ tds_read_config_info(TDSSOCKET * tds, TDSLOGIN * login, TDSLOCALE * locale)
 		tdsdump_log(TDS_DBG_INFO1, "\t%20s = %d\n", "check_ssl_hostname", connection->check_ssl_hostname);
 		tdsdump_log(TDS_DBG_INFO1, "\t%20s = %s\n", "db_filename", tds_dstr_cstr(&connection->db_filename));
 		tdsdump_log(TDS_DBG_INFO1, "\t%20s = %d\n", "readonly_intent", connection->readonly_intent);
+#ifdef HAVE_OPENSSL
+		tdsdump_log(TDS_DBG_INFO1, "\t%20s = %s\n", "openssl_ciphers", tds_dstr_cstr(&connection->openssl_ciphers));
+#endif
 
 		tdsdump_close();
 	}
@@ -677,6 +681,8 @@ tds_parse_conf_section(const char *option, const char *value, void *param)
 	} else if (!strcmp(option, TDS_STR_READONLY_INTENT)) {
 		login->readonly_intent = tds_config_boolean(option, value, login);
 		tdsdump_log(TDS_DBG_FUNC, "Setting ReadOnly Intent to '%s'.\n", value);
+	} else if (!strcmp(option, TLS_STR_OPENSSL_CIPHERS)) {
+		s = tds_dstr_copy(&login->openssl_ciphers, value);
 	} else {
 		tdsdump_log(TDS_DBG_INFO1, "UNRECOGNIZED option '%s' ... ignoring.\n", option);
 	}
@@ -758,20 +764,21 @@ tds_config_login(TDSLOGIN * connection, TDSLOGIN * login)
 		res = tds_dstr_dup(&connection->db_filename, &login->db_filename);
 	}
 
+	if (res && !tds_dstr_isempty(&login->openssl_ciphers)) {
+		res = tds_dstr_dup(&connection->openssl_ciphers, &login->openssl_ciphers);
+	}
+
 	/* copy other info not present in configuration file */
 	connection->capabilities = login->capabilities;
 
 	if (login->readonly_intent)
 		connection->readonly_intent = login->readonly_intent;
-
 	connection->use_new_password = login->use_new_password;
 
-    if(login->use_ntlmv2_specified) {
-        connection->use_ntlmv2_specified = login->use_ntlmv2_specified;
-        connection->use_ntlmv2 = login->use_ntlmv2;
-    }
-
-    connection->encryption_enabled = login->encryption_enabled;
+	if (login->use_ntlmv2_specified) {
+		connection->use_ntlmv2_specified = login->use_ntlmv2_specified;
+		connection->use_ntlmv2 = login->use_ntlmv2;
+	}
 
 	if (res)
 		res = tds_dstr_dup(&connection->new_password, &login->new_password);

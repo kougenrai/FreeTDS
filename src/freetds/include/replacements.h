@@ -168,10 +168,6 @@ int tds_daemon(int no_chdir, int no_close);
 #define daemon(d,c) tds_daemon(d,c)
 #endif
 
-char *tds_getpassarg(char *arg);
-void tds_sleep_s(unsigned sec);
-void tds_sleep_ms(unsigned ms);
-
 #ifdef __cplusplus
 }
 #endif

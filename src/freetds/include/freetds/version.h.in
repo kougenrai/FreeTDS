@@ -20,7 +20,7 @@
 #ifndef _tdsversion_h_
 #define _tdsversion_h_
 
-/* $Id: 9640daf619734147e3b5ff6a1dad56ad305ffa51 $ */
+/* $Id$ */
 
 #define TDS_VERSION_NO "@PACKAGE@ v@VERSION@"
 

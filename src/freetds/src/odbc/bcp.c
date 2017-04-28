@@ -97,12 +97,12 @@ odbc_bcp_init(TDS_DBC *dbc, const ODBC_CHAR *tblname, const ODBC_CHAR *hfile,
 				    dbc, SQLWSTR(tblname->wide), SQLWSTR(hfile->wide), SQLWSTR(errfile->wide), direction);
 			SQLWSTR_FREE();
 		} else {
+#else
+		{
 #endif
-		tdsdump_log(TDS_DBG_FUNC, "bcp_init(%p, %s, %s, %s, %d)\n",
-			    dbc, tblname->mb, hfile->mb, errfile->mb, direction);
-#ifdef ENABLE_ODBC_WIDE
+			tdsdump_log(TDS_DBG_FUNC, "bcp_init(%p, %s, %s, %s, %d)\n",
+				    dbc, (const char*) tblname, (const char*) hfile, (const char*) errfile, direction);
 		}
-#endif
 	}
 	if (!tblname)
 		ODBCBCP_ERROR_RETURN("HY009");
@@ -547,7 +547,7 @@ _bcp_get_col_data(TDSBCPINFO *bcpinfo, TDSCOLUMN *bindcol, int offset)
 	TDS_TINYINT ti;
 	TDS_SMALLINT si;
 	TDS_INT li;
-	tds_sysdep_int64_type lli;
+	TDS_INT8 lli;
 	TDS_SERVER_TYPE desttype, coltype;
 	SQLLEN col_len;
 	int data_is_null;
@@ -601,7 +601,7 @@ _bcp_get_col_data(TDSBCPINFO *bcpinfo, TDSCOLUMN *bindcol, int offset)
 		data_is_null = 1;
 	else if (!data_is_null && bindcol->column_bindlen != SQL_VARLEN_DATA) {
 		if (col_len != SQL_NULL_DATA)
-			col_len = ((tds_sysdep_int64_type)bindcol->column_bindlen < col_len) ? bindcol->column_bindlen : col_len;
+			col_len = ((TDS_INT8)bindcol->column_bindlen < col_len) ? bindcol->column_bindlen : col_len;
 		else
 			col_len = bindcol->column_bindlen;
 	}

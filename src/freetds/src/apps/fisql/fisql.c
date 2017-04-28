@@ -34,6 +34,14 @@
 #include <locale.h>
 #endif
 
+#if HAVE_SYS_TYPES_H
+#include <sys/types.h>
+#endif /* HAVE_SYS_TYPES_H */
+
+#if HAVE_SYS_STAT_H
+#include <sys/stat.h>
+#endif /* HAVE_SYS_STAT_H */
+
 #include <sybfront.h>
 #include <sybdb.h>
 #include "terminal.h"
@@ -675,6 +683,8 @@ main(int argc, char *argv[])
 		signal(SIGINT, active_interrupt_handler);
 		dbsetinterrupt(dbproc, (void *) active_interrupt_pending, (void *) active_interrupt_servhandler);
 		if (dbsqlexec(dbproc) == SUCCEED) {
+			int status_printed = 0;
+
 			maybe_handle_active_interrupt();
 			while ((dbrc = dbresults(dbproc)) != NO_MORE_RESULTS) {
 				printedlines = 0;
@@ -794,18 +804,24 @@ main(int argc, char *argv[])
 						if (DBCOUNT(dbproc) >= 0) {
 							fprintf(stdout, "(%d rows affected", (int) DBCOUNT(dbproc));
 							if (dbhasretstat(dbproc)) {
+								status_printed = 1;
 								dbrc = dbretstatus(dbproc);
 								fprintf(stdout, ", return status = %d", dbrc);
 							}
 							fprintf(stdout, ")\n");
 						} else {
 							if (dbhasretstat(dbproc)) {
+								status_printed = 1;
 								dbrc = dbretstatus(dbproc);
 								fprintf(stdout, "(return status = %d)\n", dbrc);
 							}
 						}
 					}
 				}
+			}
+			if (!status_printed && dbhasretstat(dbproc)) {
+				dbrc = dbretstatus(dbproc);
+				fprintf(stdout, "(return status = %d)\n", dbrc);
 			}
 		} else {
 			/* Something failed, so change the default

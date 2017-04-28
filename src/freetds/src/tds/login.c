@@ -559,7 +559,11 @@ tds_connect(TDSSOCKET * tds, TDSLOGIN * login, int *p_oserr)
 		if (tds->conn->spid == -1) {
 			strcat(str, "select @@spid ");
 		}
-		if (!db_selected && !tds_dstr_isempty(&login->database)) {
+		/* Select proper database if specified.
+		 * SQL Anywhere does not support multiple databases and USE statement
+		 * so don't send the request to avoid connection failures */
+		if (!db_selected && !tds_dstr_isempty(&login->database) &&
+		    (tds->conn->product_name == NULL || strcasecmp(tds->conn->product_name, "SQL Anywhere") != 0)) {
 			strcat(str, "use ");
 			tds_quote_id(tds, strchr(str, 0), tds_dstr_cstr(&login->database), -1);
 		}
@@ -1121,23 +1125,13 @@ tds71_do_login(TDSSOCKET * tds, TDSLOGIN* login)
 	tds_put_n(tds, buf, start_pos);
 	/* netlib version */
 	tds_put_n(tds, IS_TDS72_PLUS(tds->conn) ? netlib9 : netlib8, 6);
-
-    if(login->encryption_enabled)
-    {
-        /* encryption */
-    #if !defined(HAVE_GNUTLS) && !defined(HAVE_OPENSSL)
-        /* not supported */
-        tds_put_byte(tds, 2);
-    #else
-        tds_put_byte(tds, login->encryption_level >= TDS_ENCRYPTION_REQUIRE ? 1 : 0);
-    #endif
-    }
-    else
-    {
-        /* Disabled */
-        tds_put_byte(tds, 2);
-    }
-
+	/* encryption */
+#if !defined(HAVE_GNUTLS) && !defined(HAVE_OPENSSL)
+	/* not supported */
+	tds_put_byte(tds, 2);
+#else
+	tds_put_byte(tds, login->encryption_level >= TDS_ENCRYPTION_REQUIRE ? 1 : 0);
+#endif
 	/* instance */
 	tds_put_n(tds, instance_name, instance_name_len);
 	/* pid */

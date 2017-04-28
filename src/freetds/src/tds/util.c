@@ -184,8 +184,6 @@ tds_swap_bytes(void *buf, int bytes)
 	}
 }
 
-/* not used by FreeTDS, uncomment if needed */
-#ifdef ENABLE_DEVELOPING
 unsigned int
 tds_gettime_ms(void)
 {
@@ -205,7 +203,6 @@ tds_gettime_ms(void)
 #error How to implement tds_gettime_ms ??
 #endif
 }
-#endif
 
 /*
  * Call the client library's error handler
@@ -266,8 +263,8 @@ static const TDS_ERROR_MESSAGE tds_error_messages[] =
 	, { TDSEOK,              EXCONSISTENCY,	"unrecognized msgno" }
 	};
 
-static
-const char * retname(int retcode)
+static const char *
+retname(int retcode)
 {
 	switch(retcode) {
 	case TDS_INT_CONTINUE:

@@ -35,6 +35,7 @@
 #include <freetds/string.h>
 #include "replacements.h"
 #include <freetds/enum_cap.h>
+#include <freetds/utils.h>
 
 #if HAVE_SYS_SOCKET_H
 #include <sys/socket.h>
@@ -755,7 +756,8 @@ tds_alloc_locale(void)
 	REQ(i,DATA_SENSITIVITY) REQ(i,DATA_BOUNDARY) REQ(i,PROTO_DYNPROC) REQ(i,DATA_FLTN) \
 	REQ(i,DATA_BITN) REQ(i,DATA_INT8) REQ(i,WIDETABLE) \
 	REQ(i,DATA_UINT2) REQ(i,DATA_UINT4) REQ(i,DATA_UINT8) REQ(i,DATA_UINTN) REQ(i,LARGEIDENT) \
-	REQ(i,SRVPKTSIZE) REQ(i,DATA_DATE) REQ(i,DATA_TIME) REQ(i,DATA_BIGTIME) REQ(i,DATA_BIGDATETIME)
+	REQ(i,SRVPKTSIZE) REQ(i,DATA_DATE) REQ(i,DATA_TIME) REQ(i,DATA_BIGTIME) REQ(i,DATA_BIGDATETIME) \
+	REQ(i,OBJECT_CHAR) REQ(i,OBJECT_BINARY) REQ(i,DATA_NLBIN)
 #define REQ(i,n) |(((TDS_REQ_ ## n / 8) == i)?(1<<(TDS_REQ_ ## n & 7)):0)
 #define REQB(i) 0 SUPPORTED_REQ_CAP(i)
 
@@ -984,6 +986,7 @@ tds_alloc_login(int use_environment)
 	tds_dstr_init(&login->cafile);
 	tds_dstr_init(&login->crlfile);
 	tds_dstr_init(&login->db_filename);
+	tds_dstr_init(&login->openssl_ciphers);
 
 	if (use_environment) {
 		const char *s;
@@ -1000,8 +1003,7 @@ tds_alloc_login(int use_environment)
 	}
 
 	login->capabilities = defaultcaps;
-    login->use_ntlmv2_specified = 0;
-    login->encryption_enabled   = 1;
+	login->use_ntlmv2_specified = 0;
 
 	Cleanup:
 	return login;
@@ -1039,6 +1041,7 @@ tds_free_login(TDSLOGIN * login)
 	tds_dstr_free(&login->cafile);
 	tds_dstr_free(&login->crlfile);
 	tds_dstr_free(&login->db_filename);
+	tds_dstr_free(&login->openssl_ciphers);
 	free(login);
 }
 

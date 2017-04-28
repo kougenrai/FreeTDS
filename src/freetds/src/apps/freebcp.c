@@ -56,6 +56,7 @@
 #endif
 
 #include <freetds/tds.h>
+#include <freetds/utils.h>
 #include "replacements.h"
 #include <sybfront.h>
 #include <sybdb.h>
@@ -86,8 +87,8 @@ main(int argc, char **argv)
 	setlocale(LC_ALL, "");
 
 #ifdef __VMS
-        /* Convert VMS-style arguments to Unix-style */
-        parse_vms_args(&argc, &argv);
+	/* Convert VMS-style arguments to Unix-style */
+	parse_vms_args(&argc, &argv);
 #endif
 
 	memset(&params, '\0', sizeof(params));
@@ -106,7 +107,7 @@ main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
-	if (!setoptions(dbproc, &params)) 
+	if (!setoptions(dbproc, &params))
 		return FALSE;
 
 	if (params.cflag) {	/* character format file */
@@ -167,7 +168,7 @@ process_parameters(int argc, char **argv, BCPPARAMDATA *pdata)
 	extern char *optarg;
 	extern int optind;
 	extern int optopt;
-	
+
 	int ch;
 
 	if (argc < 6) {
@@ -175,8 +176,8 @@ process_parameters(int argc, char **argv, BCPPARAMDATA *pdata)
 		return (FALSE);
 	}
 
-	/* 
-	 * Set some defaults and read the table, file, and direction arguments.  
+	/*
+	 * Set some defaults and read the table, file, and direction arguments.
 	 */
 	pdata->firstrow = 0;
 	pdata->lastrow = 0;
@@ -208,8 +209,8 @@ process_parameters(int argc, char **argv, BCPPARAMDATA *pdata)
 	free(pdata->hostfilename);
 	pdata->hostfilename = strdup(argv[3]);
 
-	/* 
-	 * Get the rest of the arguments 
+	/*
+	 * Get the rest of the arguments
 	 */
 	optind = 4; /* start processing options after table, direction, & filename */
 	while ((ch = getopt(argc, argv, "m:f:e:F:L:b:t:r:U:P:i:I:S:h:T:A:o:O:0:C:ncEdvVD:")) != -1) {
@@ -319,11 +320,11 @@ process_parameters(int argc, char **argv, BCPPARAMDATA *pdata)
 		}
 	}
 
-	/* 
-	 * Check for required/disallowed option combinations 
-	 * If no username is provided, rely on domain login. 
+	/*
+	 * Check for required/disallowed option combinations
+	 * If no username is provided, rely on domain login.
 	 */
-	 
+
 	/* Server */
 	if (!pdata->Sflag) {
 		if ((pdata->server = getenv("DSQUERY")) != NULL) {
@@ -401,8 +402,8 @@ login_to_database(BCPPARAMDATA * pdata, DBPROCESS ** pdbproc)
 	if (pdata->interfacesfile != NULL)
 		dbsetifile(pdata->interfacesfile);
 
-	/* 
-	 * Allocate and initialize the LOGINREC structure to be used 
+	/*
+	 * Allocate and initialize the LOGINREC structure to be used
 	 * to open a connection to SQL Server.
 	 */
 
@@ -416,7 +417,7 @@ login_to_database(BCPPARAMDATA * pdata, DBPROCESS ** pdbproc)
 		DBSETLPWD(login, pdata->pass);
 		memset(pdata->pass, 0, strlen(pdata->pass));
 	}
-	
+
 	DBSETLAPP(login, "FreeBCP");
 	if (pdata->charset)
 		DBSETLCHARSET(login, pdata->charset);
@@ -456,34 +457,6 @@ file_character(BCPPARAMDATA * pdata, DBPROCESS * dbproc, DBINT dir)
 	int li_numcols = 0;
 	RETCODE ret_code = 0;
 
-	if (dir == DB_QUERYOUT) {
-		if (dbfcmd(dbproc, "SET FMTONLY ON %s SET FMTONLY OFF", pdata->dbobject) == FAIL) {
-			printf("dbfcmd failed\n");
-			return FALSE;
-		}
-	} else {
-		if (dbfcmd(dbproc, "SET FMTONLY ON select * from %s SET FMTONLY OFF", pdata->dbobject) == FAIL) {
-			printf("dbfcmd failed\n");
-			return FALSE;
-		}
-	}
-
-	if (dbsqlexec(dbproc) == FAIL) {
-		printf("dbsqlexec failed\n");
-		return FALSE;
-	}
-
-	while (NO_MORE_RESULTS != (ret_code = dbresults(dbproc))) {
-		if (ret_code == SUCCEED && li_numcols == 0) {
-			li_numcols = dbnumcols(dbproc);
-		}
-	}
-
-	if (0 == li_numcols) {
-		printf("Error in dbnumcols\n");
-		return FALSE;
-	}
-
 	if (FAIL == bcp_init(dbproc, pdata->dbobject, pdata->hostfilename, pdata->errorfile, dir))
 		return FALSE;
 
@@ -493,14 +466,14 @@ file_character(BCPPARAMDATA * pdata, DBPROCESS * dbproc, DBINT dir)
 	if (pdata->Eflag) {
 
 		bcp_control(dbproc, BCPKEEPIDENTITY, 1);
-	
+
 		if (dbfcmd(dbproc, "set identity_insert %s on", pdata->dbobject) == FAIL) {
-			printf("dbfcmd failed\n");
+			fprintf(stderr, "dbfcmd failed\n");
 			return FALSE;
 		}
-	
+
 		if (dbsqlexec(dbproc) == FAIL) {
-			printf("dbsqlexec failed\n");
+			fprintf(stderr, "dbsqlexec failed\n");
 			return FALSE;
 		}
 
@@ -512,22 +485,50 @@ file_character(BCPPARAMDATA * pdata, DBPROCESS * dbproc, DBINT dir)
 	bcp_control(dbproc, BCPLAST, pdata->lastrow);
 	bcp_control(dbproc, BCPMAXERRS, pdata->maxerrors);
 
+	if (dir == DB_QUERYOUT) {
+		if (dbfcmd(dbproc, "SET FMTONLY ON %s SET FMTONLY OFF", pdata->dbobject) == FAIL) {
+			fprintf(stderr, "dbfcmd failed\n");
+			return FALSE;
+		}
+	} else {
+		if (dbfcmd(dbproc, "SET FMTONLY ON select * from %s SET FMTONLY OFF", pdata->dbobject) == FAIL) {
+			fprintf(stderr, "dbfcmd failed\n");
+			return FALSE;
+		}
+	}
+
+	if (dbsqlexec(dbproc) == FAIL) {
+		fprintf(stderr, "dbsqlexec failed\n");
+		return FALSE;
+	}
+
+	while (NO_MORE_RESULTS != (ret_code = dbresults(dbproc))) {
+		if (ret_code == SUCCEED && li_numcols == 0) {
+			li_numcols = dbnumcols(dbproc);
+		}
+	}
+
+	if (0 == li_numcols) {
+		fprintf(stderr, "Error in dbnumcols\n");
+		return FALSE;
+	}
+
 	if (bcp_columns(dbproc, li_numcols) == FAIL) {
-		printf("Error in bcp_columns.\n");
+		fprintf(stderr, "Error in bcp_columns.\n");
 		return FALSE;
 	}
 
 	for (i = 1; i < li_numcols; ++i) {
 		if (bcp_colfmt(dbproc, i, SYBCHAR, 0, -1, (const BYTE *) pdata->fieldterm,
 			       pdata->fieldtermlen, i) == FAIL) {
-			printf("Error in bcp_colfmt col %d\n", i);
+			fprintf(stderr, "Error in bcp_colfmt col %d\n", i);
 			return FALSE;
 		}
 	}
 
 	if (bcp_colfmt(dbproc, li_numcols, SYBCHAR, 0, -1, (const BYTE *) pdata->rowterm,
 		       pdata->rowtermlen, li_numcols) == FAIL) {
-		printf("Error in bcp_colfmt col %d\n", li_numcols);
+		fprintf(stderr, "Error in bcp_colfmt col %d\n", li_numcols);
 		return FALSE;
 	}
 
@@ -554,34 +555,6 @@ file_native(BCPPARAMDATA * pdata, DBPROCESS * dbproc, DBINT dir)
 	int li_coltype;
 	RETCODE ret_code = 0;
 
-	if (dir == DB_QUERYOUT) {
-		if (dbfcmd(dbproc, "SET FMTONLY ON %s SET FMTONLY OFF", pdata->dbobject) == FAIL) {
-			printf("dbfcmd failed\n");
-			return FALSE;
-		}
-	} else {
-		if (dbfcmd(dbproc, "SET FMTONLY ON select * from %s SET FMTONLY OFF", pdata->dbobject) == FAIL) {
-			printf("dbfcmd failed\n");
-			return FALSE;
-		}
-	}
-
-	if (dbsqlexec(dbproc) == FAIL) {
-		printf("dbsqlexec failed\n");
-		return FALSE;
-	}
-
-	while (NO_MORE_RESULTS != (ret_code = dbresults(dbproc))) {
-		if (ret_code == SUCCEED && li_numcols == 0) {
-			li_numcols = dbnumcols(dbproc);
-		}
-	}
-
-	if (0 == li_numcols) {
-		printf("Error in dbnumcols\n");
-		return FALSE;
-	}
-
 	if (FAIL == bcp_init(dbproc, pdata->dbobject, pdata->hostfilename, pdata->errorfile, dir))
 		return FALSE;
 
@@ -591,14 +564,14 @@ file_native(BCPPARAMDATA * pdata, DBPROCESS * dbproc, DBINT dir)
 	if (pdata->Eflag) {
 
 		bcp_control(dbproc, BCPKEEPIDENTITY, 1);
-	
+
 		if (dbfcmd(dbproc, "set identity_insert %s on", pdata->dbobject) == FAIL) {
-			printf("dbfcmd failed\n");
+			fprintf(stderr, "dbfcmd failed\n");
 			return FALSE;
 		}
-	
+
 		if (dbsqlexec(dbproc) == FAIL) {
-			printf("dbsqlexec failed\n");
+			fprintf(stderr, "dbsqlexec failed\n");
 			return FALSE;
 		}
 
@@ -610,8 +583,36 @@ file_native(BCPPARAMDATA * pdata, DBPROCESS * dbproc, DBINT dir)
 	bcp_control(dbproc, BCPLAST, pdata->lastrow);
 	bcp_control(dbproc, BCPMAXERRS, pdata->maxerrors);
 
+	if (dir == DB_QUERYOUT) {
+		if (dbfcmd(dbproc, "SET FMTONLY ON %s SET FMTONLY OFF", pdata->dbobject) == FAIL) {
+			fprintf(stderr, "dbfcmd failed\n");
+			return FALSE;
+		}
+	} else {
+		if (dbfcmd(dbproc, "SET FMTONLY ON select * from %s SET FMTONLY OFF", pdata->dbobject) == FAIL) {
+			fprintf(stderr, "dbfcmd failed\n");
+			return FALSE;
+		}
+	}
+
+	if (dbsqlexec(dbproc) == FAIL) {
+		fprintf(stderr, "dbsqlexec failed\n");
+		return FALSE;
+	}
+
+	while (NO_MORE_RESULTS != (ret_code = dbresults(dbproc))) {
+		if (ret_code == SUCCEED && li_numcols == 0) {
+			li_numcols = dbnumcols(dbproc);
+		}
+	}
+
+	if (0 == li_numcols) {
+		fprintf(stderr, "Error in dbnumcols\n");
+		return FALSE;
+	}
+
 	if (bcp_columns(dbproc, li_numcols) == FAIL) {
-		printf("Error in bcp_columns.\n");
+		fprintf(stderr, "Error in bcp_columns.\n");
 		return FALSE;
 	}
 
@@ -619,7 +620,7 @@ file_native(BCPPARAMDATA * pdata, DBPROCESS * dbproc, DBINT dir)
 		li_coltype = dbcoltype(dbproc, i);
 
 		if (bcp_colfmt(dbproc, i, li_coltype, -1, -1, NULL, -1, i) == FAIL) {
-			printf("Error in bcp_colfmt col %d\n", i);
+			fprintf(stderr, "Error in bcp_colfmt col %d\n", i);
 			return FALSE;
 		}
 	}
@@ -652,14 +653,14 @@ file_formatted(BCPPARAMDATA * pdata, DBPROCESS * dbproc, DBINT dir)
 	if (pdata->Eflag) {
 
 		bcp_control(dbproc, BCPKEEPIDENTITY, 1);
-	
+
 		if (dbfcmd(dbproc, "set identity_insert %s on", pdata->dbobject) == FAIL) {
-			printf("dbfcmd failed\n");
+			fprintf(stderr, "dbfcmd failed\n");
 			return FALSE;
 		}
-	
+
 		if (dbsqlexec(dbproc) == FAIL) {
-			printf("dbsqlexec failed\n");
+			fprintf(stderr, "dbsqlexec failed\n");
 			return FALSE;
 		}
 
@@ -698,8 +699,8 @@ setoptions(DBPROCESS * dbproc, BCPPARAMDATA * params)
 		return FALSE;
 	}
 
-	/* 
-	 * If the option is a filename, read the SQL text from the file.  
+	/*
+	 * If the option is a filename, read the SQL text from the file.
 	 * Else pass the option verbatim to the server.
 	 */
 	if (params->options) {
@@ -721,19 +722,19 @@ setoptions(DBPROCESS * dbproc, BCPPARAMDATA * params)
 			}
 			if (!feof (optFile)) {
 				perror("freebcp");
-        			fprintf(stderr, "error reading options file \"%s\" at %s:%d\n", params->options, __FILE__, __LINE__);
+				fprintf(stderr, "error reading options file \"%s\" at %s:%d\n", params->options, __FILE__, __LINE__);
 				fclose(optFile);
 				return FALSE;
 			}
 			fclose(optFile);
 		}
 	}
-	
+
 	if (dbsqlexec(dbproc) == FAIL) {
 		fprintf(stderr, "setoptions() failed sending options at %s:%d\n", __FILE__, __LINE__);
 		return FALSE;
 	}
-	
+
 	while ((fOK = dbresults(dbproc)) == SUCCEED) {
 		while ((fOK = dbnextrow(dbproc)) == REG_ROW)
 			continue;
@@ -788,7 +789,7 @@ err_handler(DBPROCESS * dbproc, int severity, int dberr, int oserr, char *dberrs
 		printf("%d rows sent to SQL Server.\n", sent += batch);
 		return INT_CANCEL;
 	}
-	
+
 	if (dberr) {
 		fprintf(stderr, "Msg %d, Level %d\n", dberr, severity);
 		fprintf(stderr, "%s\n\n", dberrstr);
@@ -812,16 +813,16 @@ msg_handler(DBPROCESS * dbproc, DBINT msgno, int msgstate, int severity, char *m
 	if (msgno == 5701 || msgno == 5703)
 		return (0);
 
-	printf("Msg %ld, Level %d, State %d\n", (long) msgno, severity, msgstate);
+	fprintf(stderr, "Msg %ld, Level %d, State %d\n", (long) msgno, severity, msgstate);
 
 	if (strlen(srvname) > 0)
-		printf("Server '%s', ", srvname);
+		fprintf(stderr, "Server '%s', ", srvname);
 	if (strlen(procname) > 0)
-		printf("Procedure '%s', ", procname);
+		fprintf(stderr, "Procedure '%s', ", procname);
 	if (line > 0)
-		printf("Line %d", line);
+		fprintf(stderr, "Line %d", line);
 
-	printf("\n\t%s\n", msgtext);
+	fprintf(stderr, "\n\t%s\n", msgtext);
 
 	return (0);
 }

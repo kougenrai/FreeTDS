@@ -237,10 +237,9 @@ odbc_mb2utf(TDS_DBC *dbc, DSTR *res, const char *s, unsigned int len)
 
 	/* char_conv is only mostly const */
 	memset((TDS_ERRNO_MESSAGE_FLAGS*) &char_conv->suppress, 0, sizeof(char_conv->suppress));
-	if (tds_iconv(dbc->tds_socket, char_conv, to_server, &ib, &il, &ob, &ol) == (size_t)-1) {
-		free(buf);
+	if (tds_iconv(dbc->tds_socket, char_conv, to_server, &ib, &il, &ob, &ol) == (size_t)-1)
 		return NULL;
-	}
+
 	return tds_dstr_setlen(res, ob - buf);
 }
 #endif
@@ -430,7 +429,7 @@ odbc_set_string_flag(TDS_DBC *dbc, SQLPOINTER buffer, SQLINTEGER cbBuffer, void 
 			ol = sizeof(discard);
 			ob = discard;
 			char_conv->suppress.e2big = 1;
-			if (tds_iconv(dbc->tds_socket, char_conv, to_client, &ib, &il, &ob, &ol) == (size_t)-1)
+			if (tds_iconv(dbc->tds_socket, char_conv, to_client, &ib, &il, &ob, &ol) == (size_t)-1 && errno != E2BIG)
 				result = SQL_ERROR;
 			ol = sizeof(discard) - ol;
 			/* if there are still left space copy the partial conversion */
@@ -736,11 +735,15 @@ odbc_sql_to_server_type(TDSCONNECTION * conn, int sql_type, int sql_unsigned)
 
 	switch (sql_type) {
 	case SQL_WCHAR:
+		if (IS_TDS50(conn) && tds_capability_has_req(conn, TDS_REQ_DATA_NLBIN))
+			return XSYBNCHAR;
 		if (IS_TDS7_PLUS(conn))
 			return XSYBNCHAR;
 	case SQL_CHAR:
 		return SYBCHAR;
 	case SQL_WVARCHAR:
+		if (IS_TDS50(conn) && tds_capability_has_req(conn, TDS_REQ_DATA_NLBIN))
+			return XSYBNVARCHAR;
 		if (IS_TDS7_PLUS(conn))
 			return XSYBNVARCHAR;
 	case SQL_VARCHAR:

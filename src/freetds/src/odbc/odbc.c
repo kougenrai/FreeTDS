@@ -34,6 +34,7 @@
 #include <assert.h>
 #include <ctype.h>
 
+#include <freetds/utils.h>
 #include <freetds/odbc.h>
 #include <freetds/iconv.h>
 #include <freetds/string.h>
@@ -3705,6 +3706,8 @@ odbc_fix_data_type_col(TDS_STMT *stmt, int idx)
 		TDS_INT *data = (TDS_INT *) colinfo->column_data;
 		*data = odbc_swap_datetime_sql_type(*data, 0);
 		}
+		break;
+	default:
 		break;
 	}
 }

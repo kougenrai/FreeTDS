@@ -119,19 +119,19 @@ typedef struct tds_dstr {
  * these. (In the TDS layer only, the API layers have their
  * own typedefs which equate to these).
  */
-typedef char TDS_CHAR;					/*  8-bit char     */
-typedef unsigned char TDS_UCHAR;			/*  8-bit uchar    */
-typedef unsigned char TDS_TINYINT;			/*  8-bit unsigned */
-typedef tds_sysdep_int16_type TDS_SMALLINT;		/* 16-bit int      */
-typedef unsigned tds_sysdep_int16_type TDS_USMALLINT;	/* 16-bit unsigned */
-typedef tds_sysdep_int32_type TDS_INT;			/* 32-bit int      */
-typedef unsigned tds_sysdep_int32_type TDS_UINT;	/* 32-bit unsigned */
-typedef tds_sysdep_real32_type TDS_REAL;		/* 32-bit real     */
-typedef tds_sysdep_real64_type TDS_FLOAT;		/* 64-bit real     */
-typedef tds_sysdep_int64_type TDS_INT8;			/* 64-bit integer  */
-typedef unsigned tds_sysdep_int64_type TDS_UINT8;	/* 64-bit unsigned */
-typedef tds_sysdep_intptr_type TDS_INTPTR;
-typedef unsigned tds_sysdep_intptr_type TDS_UINTPTR;
+typedef char TDS_CHAR;				/*  8-bit char     */
+typedef uint8_t TDS_UCHAR;			/*  8-bit uchar    */
+typedef uint8_t  TDS_TINYINT;			/*  8-bit unsigned */
+typedef int16_t  TDS_SMALLINT;			/* 16-bit int      */
+typedef uint16_t TDS_USMALLINT;			/* 16-bit unsigned */
+typedef int32_t TDS_INT;			/* 32-bit int      */
+typedef uint32_t TDS_UINT;			/* 32-bit unsigned */
+typedef int64_t TDS_INT8;			/* 64-bit integer  */
+typedef uint64_t TDS_UINT8;			/* 64-bit unsigned */
+typedef intptr_t TDS_INTPTR;
+typedef uintptr_t TDS_UINTPTR;
+typedef tds_sysdep_real32_type TDS_REAL;	/* 32-bit real     */
+typedef tds_sysdep_real64_type TDS_FLOAT;	/* 64-bit real     */
 
 #include <freetds/proto.h>
 
@@ -272,6 +272,7 @@ enum tds_end
  */
 typedef enum {	TDSEOK    = TDS_SUCCESS, 
 		TDSEVERDOWN    =  100,
+		TDSEINPROGRESS,
 		TDSEICONVIU    = 2400, 
 		TDSEICONVAVAIL = 2401, 
 		TDSEICONVO     = 2402, 
@@ -336,11 +337,6 @@ typedef enum tds_encryption_level {
 
 #define TDS_ZERO_FREE(x) do {free((x)); (x) = NULL;} while(0)
 #define TDS_VECTOR_SIZE(x) (sizeof(x)/sizeof(x[0]))
-#ifdef offsetof
-#define TDS_OFFSET(str, field) offsetof(str, field)
-#else
-#define TDS_OFFSET(str, field) (((char*)&((str*)0)->field)-((char*)0))
-#endif
 
 #if defined(__GNUC__) && __GNUC__ >= 3
 # define TDS_LIKELY(x)	__builtin_expect(!!(x), 1)
@@ -442,7 +438,6 @@ bool is_tds_type_valid(int type)
 #define TDS_DEF_BLKSZ		512
 #define TDS_DEF_CHARSET		"iso_1"
 #define TDS_DEF_LANG		"us_english"
-
 #if TDS42
 #define TDS_DEFAULT_VERSION	0x402
 #define TDS_DEF_PORT		1433
@@ -520,6 +515,8 @@ bool is_tds_type_valid(int type)
 #define TDS_STR_DBFILENAME	"database filename"
 /* Application Intent MSSQL 2012 support */
 #define TDS_STR_READONLY_INTENT "read-only intent"
+/* configurable cipher suite to send to openssl's SSL_set_cipher_list() function */
+#define TLS_STR_OPENSSL_CIPHERS "openssl ciphers"
 
 
 /* TODO do a better check for alignment than this */
@@ -527,7 +524,7 @@ typedef union
 {
 	void *p;
 	int i;
-	TDS_INT8 ui;
+	int64_t ui;
 } tds_align_struct;
 
 #define TDS_ALIGN_SIZE sizeof(tds_align_struct)
@@ -561,13 +558,13 @@ typedef struct tds_login
 	DSTR db_filename;		/**< database filename to attach (MSSQL) */
 	DSTR cafile;			/**< certificate authorities file */
 	DSTR crlfile;			/**< certificate revocation file */
+	DSTR openssl_ciphers;
 	DSTR app_name;
 	DSTR user_name;	    	/**< account for login */
 	DSTR password;	    	/**< password of account login */
 	DSTR new_password;	    	/**< new password to set (TDS 7.2+) */
 
 	DSTR library;	/* Ct-Library, DB-Library,  TDS-Library or ODBC */
-    TDS_TINYINT encryption_enabled;
 	TDS_TINYINT encryption_level;
 
 	TDS_INT query_timeout;
@@ -589,7 +586,7 @@ typedef struct tds_login
 	unsigned int emul_little_endian:1;
 	unsigned int gssapi_use_delegation:1;
 	unsigned int use_ntlmv2:1;
-    unsigned int use_ntlmv2_specified:1;
+	unsigned int use_ntlmv2_specified:1;
 	unsigned int use_lanman:1;
 	unsigned int mars:1;
 	unsigned int use_utf16:1;
@@ -781,6 +778,8 @@ struct tds_column
 	TDS_INT column_textpos;
 	TDS_INT column_text_sqlgetdatapos;
 	TDS_CHAR column_text_sqlputdatainfo;
+
+	TDS_TINYINT blob_type;
 
 	BCPCOLDATA *bcp_column_data;
 	/**
@@ -1077,7 +1076,7 @@ enum TDS_ICONV_ENTRY
 
 typedef struct tds_authentication
 {
-	TDS_UCHAR *packet;
+	uint8_t *packet;
 	int packet_len;
 	TDSRET (*free)(TDSCONNECTION* conn, struct tds_authentication * auth);
 	TDSRET (*handle_next)(TDSSOCKET * tds, struct tds_authentication * auth, size_t len);
@@ -1295,14 +1294,6 @@ void tds_iconv_free(TDSCONNECTION * conn);
 TDSICONV *tds_iconv_from_collate(TDSCONNECTION * conn, TDS_UCHAR collate[5]);
 
 
-/* threadsafe.c */
-char *tds_timestamp_str(char *str, int maxlen);
-struct tm *tds_localtime_r(const time_t *timep, struct tm *result);
-struct hostent *tds_gethostbyname_r(const char *servername, struct hostent *result, char *buffer, int buflen, int *h_errnop);
-int tds_getservice(const char *name);
-char *tds_get_homedir(void);
-
-
 /* mem.c */
 void tds_free_socket(TDSSOCKET * tds);
 void tds_free_all_results(TDSSOCKET * tds);
@@ -1482,9 +1473,7 @@ DSTR* tds_dstr_get(TDSSOCKET * tds, DSTR * s, size_t len);
 int tdserror (const TDSCONTEXT * tds_ctx, TDSSOCKET * tds, int msgno, int errnum);
 TDS_STATE tds_set_state(TDSSOCKET * tds, TDS_STATE state);
 void tds_swap_bytes(void *buf, int bytes);
-#ifdef ENABLE_DEVELOPING
 unsigned int tds_gettime_ms(void);
-#endif
 char *tds_strndup(const void *s, TDS_INTPTR len);
 
 
@@ -1530,9 +1519,7 @@ int tds_connection_write(TDSSOCKET *tds, const unsigned char *buf, int buflen, i
 #define TDSSELREAD  POLLIN
 #define TDSSELWRITE POLLOUT
 int tds_select(TDSSOCKET * tds, unsigned tds_sel, int timeout_seconds);
-#if ENABLE_ODBC_MARS
 void tds_connection_close(TDSCONNECTION *conn);
-#endif
 int tds_goodread(TDSSOCKET * tds, unsigned char *buf, int buflen);
 int tds_goodwrite(TDSSOCKET * tds, const unsigned char *buffer, size_t buflen);
 void tds_socket_flush(TDS_SYS_SOCKET sock);
@@ -1554,11 +1541,6 @@ int tds_append_cancel(TDSSOCKET *tds);
 TDSRET tds_append_fin(TDSSOCKET *tds);
 #else
 int tds_put_cancel(TDSSOCKET * tds);
-static inline
-void tds_connection_close(TDSCONNECTION *connection)
-{
-	tds_close_socket((TDSSOCKET* ) connection);
-}
 #endif
 
 

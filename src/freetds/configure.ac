@@ -11,7 +11,7 @@ dnl ------------------------------------------------------------
 # ------------------------------------------------------------
 # Initialization
 # ------------------------------------------------------------
-AC_INIT(FreeTDS, 1.00.6)
+AC_INIT(FreeTDS, 1.1.dev.esyscmd(printf $(date +"%Y%m%d")))
 AC_CONFIG_SRCDIR(src/dblib/dblib.c)
 AC_PREREQ(2.53)
 
@@ -599,8 +599,7 @@ if test "$with_odbc_nodm"; then
 	#  itself is treated as the driver manager to be linked.
 	# Can't use ODBCLIB/LDFLAGS variables since they are used in building
 	#  other directories.
-	ODBCNODMLIB="-L.. -ltdsodbc"
-	ODBCNODMLIBAPP="-L../odbc -ltdsodbc"
+	ODBCNODMLIB="-L\$(top_builddir)/src/odbc -ltdsodbc"
 	odbc=true
 fi
 
@@ -723,7 +722,6 @@ AC_SUBST(ODBC_INC)
 AC_SUBST(ODBCLIB)
 AC_SUBST(ODBCINSTLIB)
 AC_SUBST(ODBCNODMLIB)
-AC_SUBST(ODBCNODMLIBAPP)
 
 AC_DEFUN([TDS_CHECK_GMP], [
 AC_TRY_LINK([#include <stdio.h>
@@ -935,11 +933,13 @@ AC_CONFIG_FILES(include/freetds/version.h \
 	doc/Makefile \
 	samples/Makefile \
 	src/Makefile \
-		src/tds/Makefile src/tds/unittests/Makefile \
-		src/dblib/Makefile src/dblib/unittests/Makefile \
-		src/ctlib/Makefile src/ctlib/unittests/Makefile \
-		src/replacements/Makefile \
-		src/replacements/unittests/Makefile \
+	src/tds/Makefile src/tds/unittests/Makefile \
+	src/dblib/Makefile src/dblib/unittests/Makefile \
+	src/ctlib/Makefile src/ctlib/unittests/Makefile \
+	src/replacements/Makefile \
+	src/replacements/unittests/Makefile \
+	src/utils/Makefile \
+	src/utils/unittests/Makefile \
 	src/server/Makefile \
 	src/pool/Makefile \
 	src/odbc/Makefile \
