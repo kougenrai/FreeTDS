@@ -8,7 +8,7 @@ if(PERL_FOUND AND NOT EXISTS "${CMAKE_SOURCE_DIR}/configure")
 	endif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 
 	add_custom_command(OUTPUT tds_willconvert.h
-		COMMAND ${PERL_EXECUTABLE} tds_willconvert.pl ../../include/freetds/proto.h > tds_willconvert.h
+		COMMAND ${PERL_EXECUTABLE} tds_willconvert.pl > tds_willconvert.h
 		MAIN_DEPENDENCY tds_willconvert.pl
 		WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR})
 	add_custom_command(OUTPUT encodings.h
@@ -38,9 +38,8 @@ add_library(tds STATIC
         write.c convert.c numeric.c config.c query.c iconv.c
         locale.c threadsafe.c vstrbuild.c
         tdsstring.c getmac.c data.c net.c tls.c
-        tds_checks.c log.c
-        bulk.c packet.c stream.c random.c
-        sec_negotiate_gnutls.h sec_negotiate_openssl.h sec_negotiate.c
+        tds_checks.c tds_checks.h log.c
+        bulk.c packet.c stream.c
 	tds_willconvert.h encodings.h num_limits.h tds_types.h
 	${add_SRCS}
 )

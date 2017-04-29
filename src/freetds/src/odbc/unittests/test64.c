@@ -1,6 +1,9 @@
 /* test win64 consistency */
 #include "common.h"
 
+static char software_version[] = "$Id: test64.c,v 1.11 2010-12-30 18:18:11 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
+
 /*
 set ipd processed_ptr with
 SQLParamOptions/SQLSetDescField/SQL_ATTR_PARAMS_PROCESSED_PTR
@@ -79,11 +82,11 @@ test_params(void)
 	}
 
 	/* test setting just some test pointers */
-	set_ipd_params1((SQLULEN *) int2ptr(0x01020304));
+	set_ipd_params1(int2ptr(0x01020304));
 	check_ipd_params();
-	set_ipd_params2((SQLULEN *) int2ptr(0xabcdef12));
+	set_ipd_params2(int2ptr(0xabcdef12));
 	check_ipd_params();
-	set_ipd_params3((SQLULEN *) int2ptr(0x87654321));
+	set_ipd_params3(int2ptr(0x87654321));
 	check_ipd_params();
 
 	/* now see results */
@@ -186,9 +189,9 @@ test_rows(void)
 	}
 
 	/* test setting just some test pointers */
-	set_ird_params1((SQLULEN *) int2ptr(0x01020304));
+	set_ird_params1(int2ptr(0x01020304));
 	check_ird_params();
-	set_ird_params2((SQLULEN *) int2ptr(0xabcdef12));
+	set_ird_params2(int2ptr(0xabcdef12));
 	check_ird_params();
 
 	/* now see results */
@@ -246,7 +249,6 @@ main(void)
 {
 	if (sizeof(SQLLEN) != 8) {
 		printf("Not possible for this platform.\n");
-		odbc_test_skipped();
 		return 0;
 	}
 

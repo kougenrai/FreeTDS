@@ -1,3 +1,4 @@
+# $Id: Makefile.am,v 1.74 2012-03-06 20:40:12 freddy77 Exp $
 
 SUBDIRS			=	. unittests
 AM_CPPFLAGS		=	-I$(top_srcdir)/include
@@ -14,16 +15,28 @@ libtds_la_SOURCES=	mem.c token.c util.c login.c read.c \
 	write.c convert.c numeric.c config.c query.c iconv.c \
 	locale.c threadsafe.c vstrbuild.c \
 	tdsstring.c getmac.c data.c net.c tls.c \
-	tds_checks.c log.c dlist.c \
-	bulk.c packet.c stream.c random.c \
-	sec_negotiate_gnutls.h sec_negotiate_openssl.h sec_negotiate.c \
+	tds_checks.c tds_checks.h log.c \
+	bulk.c packet.c stream.c \
 	$(AUTH_FILES)
 libtds_la_LDFLAGS=
-libtds_la_LIBADD = $(NETWORK_LIBS)
+libtds_la_LIBADD=
 
 noinst_HEADERS		= tds_willconvert.h encodings.h num_limits.h tds_types.h
 EXTRA_DIST		= tds_willconvert.h encodings.h num_limits.h tds_types.h \
 	CMakeLists.txt $(AUTH_FILES_DIST)
+
+if HAVE_DOXYGEN
+doxyfile: $(srcdir)/tds.dox
+	cp $(srcdir)/tds.dox doxyfile
+	
+## The doxygen configuration file understands environment variables.  
+
+doxy: doxyfile  $(libtds_la_SOURCES)
+	SRCDIR=$(srcdir); \
+	TOP_SRCDIR=$(top_srcdir); \
+	export SRCDIR TOP_SRCDIR; \
+	$(DOXYGEN) doxyfile
+endif
 
 # Perl is needed to build from a repository checkout.
 # Perl is *not* needed to build from a tarball.  
@@ -38,9 +51,9 @@ BUILT_SOURCES = tds_willconvert.h encodings.h num_limits.h tds_types.h
 
 clean-local: 
 	cd $(srcdir) && rm -f $(BUILT_SOURCES)
-
+	
 tds_willconvert.h: tds_willconvert.pl Makefile
-	perl $(srcdir)/tds_willconvert.pl $(top_srcdir)/include/freetds/proto.h > $@.tmp
+	perl $(srcdir)/tds_willconvert.pl > $@.tmp
 	mv $@.tmp $@
 
 encodings.h: encodings.pl alternative_character_sets.h Makefile
@@ -51,7 +64,7 @@ num_limits.h: num_limits.pl Makefile
 	perl $(srcdir)/num_limits.pl > $@.tmp
 	mv $@.tmp $@
 
-tds_types.h: types.pl Makefile $(top_srcdir)/misc/types.csv
+tds_types.h: types.pl Makefile ../../misc/types.csv
 	perl $(srcdir)/types.pl $(top_srcdir)/misc/types.csv $(top_srcdir)/include/freetds/proto.h > $@.tmp
 	mv $@.tmp $@
 endif

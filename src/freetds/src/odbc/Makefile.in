@@ -88,10 +88,6 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-@MINGW32_TRUE@am__append_1 = winlogin.c winsetup.c winmain.c
-@MINGW32_TRUE@am__append_2 = setup.res
-@MINGW32_TRUE@am__append_3 = -Wl,--kill-at -Wl,--enable-stdcall-fixup -Wl,-s -Wl,odbc_w.def -Wl,setup.res
-@MACOSX_FALSE@@MINGW32_FALSE@am__append_4 = -export-symbols-regex '^(SQL|ODBCINST).*'
 subdir = src/odbc
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps =  \
@@ -106,10 +102,11 @@ am__aclocal_m4_deps =  \
 	$(top_srcdir)/m4/acx_pthread.m4 \
 	$(top_srcdir)/m4/ax_cflags_gcc_option.m4 \
 	$(top_srcdir)/m4/check_openssl.m4 \
-	$(top_srcdir)/m4/gettimemilli.m4 $(top_srcdir)/m4/libtool.m4 \
+	$(top_srcdir)/m4/gettimemilli.m4 $(top_srcdir)/m4/iconv.m4 \
+	$(top_srcdir)/m4/lib-ld.m4 $(top_srcdir)/m4/lib-link.m4 \
+	$(top_srcdir)/m4/lib-prefix.m4 $(top_srcdir)/m4/libtool.m4 \
 	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
 	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
-	$(top_srcdir)/m4/pushlibs.m4 \
 	$(top_srcdir)/m4/sprintf_i64_format.m4 \
 	$(top_srcdir)/m4/type_socklen_t.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
@@ -117,7 +114,7 @@ am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 DIST_COMMON = $(srcdir)/Makefile.am $(am__DIST_COMMON)
 mkinstalldirs = $(SHELL) $(top_srcdir)/mkinstalldirs
 CONFIG_HEADER = $(top_builddir)/include/config.h
-CONFIG_CLEAN_FILES = version.rc
+CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
@@ -149,17 +146,24 @@ am__uninstall_files_from_dir = { \
 am__installdirs = "$(DESTDIR)$(libdir)"
 LTLIBRARIES = $(lib_LTLIBRARIES)
 am__DEPENDENCIES_1 =
-libtdsodbc_la_DEPENDENCIES = ../tds/libtds.la \
-	../replacements/libreplacements.la $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) $(am__append_2)
+@MINGW32_FALSE@libtdsodbc_la_DEPENDENCIES = ../tds/libtds.la \
+@MINGW32_FALSE@	../replacements/libreplacements.la \
+@MINGW32_FALSE@	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+@MINGW32_FALSE@	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+@MINGW32_TRUE@libtdsodbc_la_DEPENDENCIES = ../../win32/setup.res \
+@MINGW32_TRUE@	../tds/libtds.la \
+@MINGW32_TRUE@	../replacements/libreplacements.la \
+@MINGW32_TRUE@	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+@MINGW32_TRUE@	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 am__libtdsodbc_la_SOURCES_DIST = odbc.c connectparams.c \
 	convert_tds2sql.c descriptor.c prepare_query.c odbc_util.c \
-	bcp.c native.c sql2tds.c error.c odbc_checks.c sqlwchar.c \
+	native.c sql2tds.c error.c odbc_checks.c sqlwchar.c \
 	sqlwparams.h odbc_export.h error_export.h odbc_data.c \
-	winlogin.c winsetup.c winmain.c
-@MINGW32_TRUE@am__objects_1 = winlogin.lo winsetup.lo winmain.lo
+	../../win32/winlogin.c ../../win32/winsetup.c \
+	../../win32/initnet.c
+@MINGW32_TRUE@am__objects_1 = winlogin.lo winsetup.lo initnet.lo
 am_libtdsodbc_la_OBJECTS = odbc.lo connectparams.lo convert_tds2sql.lo \
-	descriptor.lo prepare_query.lo odbc_util.lo bcp.lo native.lo \
+	descriptor.lo prepare_query.lo odbc_util.lo native.lo \
 	sql2tds.lo error.lo odbc_checks.lo sqlwchar.lo odbc_data.lo \
 	$(am__objects_1)
 libtdsodbc_la_OBJECTS = $(am_libtdsodbc_la_OBJECTS)
@@ -247,8 +251,8 @@ am__define_uniq_tagged_files = \
 ETAGS = etags
 CTAGS = ctags
 DIST_SUBDIRS = $(SUBDIRS)
-am__DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/version.rc.in \
-	$(top_srcdir)/depcomp $(top_srcdir)/mkinstalldirs
+am__DIST_COMMON = $(srcdir)/Makefile.in $(top_srcdir)/depcomp \
+	$(top_srcdir)/mkinstalldirs
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 am__relativize = \
   dir0=`pwd`; \
@@ -276,7 +280,6 @@ am__relativize = \
   done; \
   reldir="$$dir2"
 ACLOCAL = @ACLOCAL@
-ALLOCA = @ALLOCA@
 AMTAR = @AMTAR@
 AM_CFLAGS = @AM_CFLAGS@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
@@ -308,10 +311,6 @@ FGREP = @FGREP@
 FREETDS_LIBGCC = @FREETDS_LIBGCC@
 FREETDS_ODBC_MODULE = @FREETDS_ODBC_MODULE@
 FREETDS_SYMBOLIC = @FREETDS_SYMBOLIC@
-GCRYPT_CFLAGS = @GCRYPT_CFLAGS@
-GCRYPT_LIBS = @GCRYPT_LIBS@
-GNUTLS_CFLAGS = @GNUTLS_CFLAGS@
-GNUTLS_LIBS = @GNUTLS_LIBS@
 GREP = @GREP@
 HAVE_OPENSSL = @HAVE_OPENSSL@
 HAVE_PERL_SOURCES = @HAVE_PERL_SOURCES@
@@ -336,14 +335,11 @@ LTLIBICONV = @LTLIBICONV@
 LTLIBOBJS = @LTLIBOBJS@
 LT_DLLOADERS = @LT_DLLOADERS@
 LT_DLPREOPEN = @LT_DLPREOPEN@
-LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAJOR = @MAJOR@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MINOR = @MINOR@
 MKDIR_P = @MKDIR_P@
-NETTLE_CFLAGS = @NETTLE_CFLAGS@
-NETTLE_LIBS = @NETTLE_LIBS@
 NETWORK_LIBS = @NETWORK_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -356,8 +352,6 @@ ODBCNODMLIB = @ODBCNODMLIB@
 ODBCNODMLIBAPP = @ODBCNODMLIBAPP@
 ODBC_CONFIG = @ODBC_CONFIG@
 ODBC_INC = @ODBC_INC@
-OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
-OPENSSL_LIBS = @OPENSSL_LIBS@
 OTOOL = @OTOOL@
 OTOOL64 = @OTOOL64@
 PACKAGE = @PACKAGE@
@@ -369,8 +363,6 @@ PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 PKG_CONFIG = @PKG_CONFIG@
-PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
-PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
@@ -448,21 +440,23 @@ top_srcdir = @top_srcdir@
 SUBDIRS = . unittests
 AM_CPPFLAGS = -I$(top_srcdir)/include $(ODBC_INC)
 lib_LTLIBRARIES = libtdsodbc.la
+@MINGW32_FALSE@MINGW_SOURCES = 
+@MINGW32_TRUE@MINGW_SOURCES = ../../win32/winlogin.c ../../win32/winsetup.c ../../win32/initnet.c
 libtdsodbc_la_SOURCES = odbc.c connectparams.c convert_tds2sql.c \
-	descriptor.c prepare_query.c odbc_util.c bcp.c native.c \
-	sql2tds.c error.c odbc_checks.c sqlwchar.c sqlwparams.h \
-	odbc_export.h error_export.h odbc_data.c $(am__append_1)
-libtdsodbc_la_LIBADD = ../tds/libtds.la \
-	../replacements/libreplacements.la $(ODBCINSTLIB) \
-	$(LTLIBICONV) $(FREETDS_LIBGCC) $(am__append_2)
-# -module is needed by Darwin (Mac OS X)
-libtdsodbc_la_LDFLAGS = $(FREETDS_SYMBOLIC) $(FREETDS_ODBC_MODULE) \
-	$(am__append_3) $(am__append_4)
-EXTRA_DIST = CMakeLists.txt winmain.c winlogin.c winsetup.c \
-	     version.rc version.rc.in setup.rc resource.h \
-	     odbc.def odbc_w.def
+	descriptor.c prepare_query.c odbc_util.c \
+	native.c sql2tds.c error.c odbc_checks.c sqlwchar.c sqlwparams.h \
+	odbc_export.h error_export.h odbc_data.c $(MINGW_SOURCES)
 
-CLEANFILES = setup.res
+@MINGW32_FALSE@libtdsodbc_la_LIBADD = ../tds/libtds.la ../replacements/libreplacements.la $(ODBCINSTLIB) $(NETWORK_LIBS) $(LTLIBICONV) $(FREETDS_LIBGCC)
+@MINGW32_TRUE@libtdsodbc_la_LIBADD = ../../win32/setup.res ../tds/libtds.la ../replacements/libreplacements.la $(ODBCINSTLIB) \
+@MINGW32_TRUE@	$(NETWORK_LIBS) $(LTLIBICONV) $(FREETDS_LIBGCC)
+
+# -module is needed by Darwin (Mac OS X)
+@MINGW32_FALSE@libtdsodbc_la_LDFLAGS = $(SYMBOLS) $(FREETDS_SYMBOLIC) $(FREETDS_ODBC_MODULE)
+@MINGW32_TRUE@libtdsodbc_la_LDFLAGS = -Wl,--kill-at -Wl,--enable-stdcall-fixup -Wl,-s -Wl,$(top_srcdir)/win32/FreeTDS.def -Wl,../../win32/setup.res $(FREETDS_SYMBOLIC)
+@MACOSX_FALSE@@MINGW32_FALSE@SYMBOLS = -export-symbols-regex '^(SQL|ODBCINST).*'
+@MACOSX_TRUE@@MINGW32_FALSE@SYMBOLS = 
+EXTRA_DIST = CMakeLists.txt
 @HAVE_PERL_SOURCES_TRUE@BUILT_SOURCES = odbc_export.h error_export.h
 all: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) all-recursive
@@ -498,8 +492,6 @@ $(top_srcdir)/configure:  $(am__configure_deps)
 $(ACLOCAL_M4):  $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 $(am__aclocal_m4_deps):
-version.rc: $(top_builddir)/config.status $(srcdir)/version.rc.in
-	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 
 install-libLTLIBRARIES: $(lib_LTLIBRARIES)
 	@$(NORMAL_INSTALL)
@@ -545,11 +537,11 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bcp.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/connectparams.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/convert_tds2sql.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/descriptor.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/error.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/initnet.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/native.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/odbc.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/odbc_checks.Plo@am__quote@
@@ -559,32 +551,49 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sql2tds.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sqlwchar.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/winlogin.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/winmain.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/winsetup.Plo@am__quote@
 
 .c.o:
-@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
-@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
-@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c -o $@ $<
 
 .c.obj:
-@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.obj$$||'`;\
-@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ `$(CYGPATH_W) '$<'` &&\
-@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
 
 .c.lo:
-@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.lo$$||'`;\
-@am__fastdepCC_TRUE@	$(LTCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
-@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Plo
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LTCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Plo
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
+
+winlogin.lo: ../../win32/winlogin.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT winlogin.lo -MD -MP -MF $(DEPDIR)/winlogin.Tpo -c -o winlogin.lo `test -f '../../win32/winlogin.c' || echo '$(srcdir)/'`../../win32/winlogin.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/winlogin.Tpo $(DEPDIR)/winlogin.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='../../win32/winlogin.c' object='winlogin.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o winlogin.lo `test -f '../../win32/winlogin.c' || echo '$(srcdir)/'`../../win32/winlogin.c
+
+winsetup.lo: ../../win32/winsetup.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT winsetup.lo -MD -MP -MF $(DEPDIR)/winsetup.Tpo -c -o winsetup.lo `test -f '../../win32/winsetup.c' || echo '$(srcdir)/'`../../win32/winsetup.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/winsetup.Tpo $(DEPDIR)/winsetup.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='../../win32/winsetup.c' object='winsetup.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o winsetup.lo `test -f '../../win32/winsetup.c' || echo '$(srcdir)/'`../../win32/winsetup.c
+
+initnet.lo: ../../win32/initnet.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT initnet.lo -MD -MP -MF $(DEPDIR)/initnet.Tpo -c -o initnet.lo `test -f '../../win32/initnet.c' || echo '$(srcdir)/'`../../win32/initnet.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/initnet.Tpo $(DEPDIR)/initnet.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='../../win32/initnet.c' object='initnet.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o initnet.lo `test -f '../../win32/initnet.c' || echo '$(srcdir)/'`../../win32/initnet.c
 
 mostlyclean-libtool:
 	-rm -f *.lo
@@ -778,7 +787,6 @@ install-strip:
 mostlyclean-generic:
 
 clean-generic:
-	-test -z "$(CLEANFILES)" || rm -f $(CLEANFILES)
 
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
@@ -883,7 +891,7 @@ uninstall-am: uninstall-libLTLIBRARIES
 
 
 @MINGW32_TRUE@.rc.res:
-@MINGW32_TRUE@	$(RC) -i $< --input-format=rc -o $@ -O coff
+@MINGW32_TRUE@	$(RC) -i $< -I $(top_builddir)/win32 --input-format=rc -o $@ -O coff
 
 odbc: $(EXTRA_LTLIBRARIES)
 	@echo ''

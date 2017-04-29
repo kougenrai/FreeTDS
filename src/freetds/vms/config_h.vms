@@ -108,9 +108,6 @@
 /* Define to 1 if you have the `gettimeofday' function. */
 #define HAVE_GETTIMEOFDAY 1
 
-/* Define to 1 if you have the `getopt' function. */
-#define HAVE_GETOPT 1
-
 /* Define to 1 if you have the `getuid' function. */
 #define HAVE_GETUID 1
 
@@ -173,8 +170,7 @@
 #undef HAVE_SETHOSTENT_R
 
 /* Define to 1 if you have the `socketpair' function. */
-/* Must be undefined, not defined to 0, when not present. */
-#if @D_SOCKETPAIR@
+#if __CRTL_VER >= 80200000
 #define HAVE_SOCKETPAIR 1
 #endif
 
@@ -340,17 +336,33 @@
 #pragma extern_prefix "freetds_" (getpass)
 char *getpass( const char* prompt );
 
+#if !HAVE_ASPRINTF
+#pragma extern_prefix "freetds_" (asprintf)
+#endif /* !HAVE_ASPRINTF */
+
+#if !HAVE_VASPRINTF
+#pragma extern_prefix "freetds_" (vasprintf)
+#endif /* !HAVE_VASPRINTF */
+
+#if !HAVE_SNPRINTF
+#pragma extern_prefix "portable_" (snprintf)
+extern int snprintf(char *, size_t, const char *, /*args*/ ...);
+#endif /* !HAVE_SNPRINTF */
+
+#if !HAVE_STRTOK_R
+#pragma extern_prefix "freetds_" (strtok_r)
+#endif /* !HAVE_STRTOK_R */
+
+#pragma extern_prefix restore
+
+#define tds_sysdep_intptr_type int	/* 32-bit int */
+
 #pragma extern_prefix "freetds_" (readpassphrase)
 char * readpassphrase(const char *, char *, size_t, int);
 #ifdef HAVE_READPASSPHRASE
 /* has to be undefined to pick up constants in readpassphrase.h */
 # undef HAVE_READPASSPHRASE
 #endif
-
-#pragma extern_prefix restore
-
-#define tds_sysdep_intptr_type int	/* 32-bit int */
-
 
 #include "replacements.h"
 

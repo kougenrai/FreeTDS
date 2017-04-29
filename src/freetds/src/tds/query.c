@@ -38,10 +38,12 @@
 #include <freetds/iconv.h>
 #include <freetds/convert.h>
 #include <freetds/string.h>
-#include <freetds/checks.h>
+#include "tds_checks.h"
 #include "replacements.h"
 
 #include <assert.h>
+
+TDS_RCSID(var, "$Id: query.c,v 1.269 2012-03-06 20:33:14 freddy77 Exp $");
 
 static void tds_put_params(TDSSOCKET * tds, TDSPARAMINFO * info, int flags);
 static void tds7_put_query_params(TDSSOCKET * tds, const char *query, size_t query_len);
@@ -57,7 +59,6 @@ static int tds_count_placeholders_ucs2le(const char *query, const char *query_en
 
 #define TDS_PUT_DATA_USE_NAME 1
 #define TDS_PUT_DATA_PREFIX_NAME 2
-#define TDS_PUT_DATA_LONG_STATUS 4
 
 #undef MIN
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
@@ -141,7 +142,7 @@ tds_convert_string(TDSSOCKET * tds, TDSICONV * char_conv, const char *s, int len
 
 	/* allocate needed buffer (+1 is to exclude 0 case) */
 	ol = il * char_conv->to.charset.max_bytes_per_char / char_conv->from.charset.min_bytes_per_char + 1;
-	buf = tds_new(char, ol);
+	buf = (char *) malloc(ol);
 	if (!buf)
 		return NULL;
 
@@ -228,7 +229,7 @@ tds5_fix_dot_query(const char *query, size_t *query_len, TDSPARAMINFO * params)
 	char colname[32];
 	char *out;
 
-	out = tds_new(char, size);
+	out = (char *) malloc(size);
 	if (!out)
 		goto memory_error;
 	pos = 0;
@@ -247,7 +248,7 @@ tds5_fix_dot_query(const char *query, size_t *query_len, TDSPARAMINFO * params)
 		if (!e)
 			break;
 		pos += sprintf(out + pos, "@P%d", i + 1);
-		if (!params || i >= params->num_cols)
+		if (i >= params->num_cols)
 			goto memory_error;
 		sprintf(colname, "@P%d", i + 1);
 		if (!tds_dstr_copy(&params->columns[i]->column_name, colname))
@@ -339,7 +340,7 @@ tds_start_query_head(TDSSOCKET *tds, unsigned char packet_type, TDSHEADERS * hea
  * \tds
  * \param packet_type  packet type
  */
-void
+static void
 tds_start_query(TDSSOCKET *tds, unsigned char packet_type)
 {
 	/* no need to check return value here because tds_start_query_head() cannot
@@ -419,17 +420,22 @@ tds_submit_query_params(TDSSOCKET * tds, const char *query, TDSPARAMINFO * param
  
 		if (!count) {
 			param_definition = tds7_build_param_def_from_params(tds, converted_query, converted_query_len, params, &definition_len);
+			if (!param_definition) {
+				tds_convert_string_free(query, converted_query);
+				tds_set_state(tds, TDS_IDLE);
+				return TDS_FAIL;
+			}
 		} else {
 			/*
 			 * TODO perhaps functions that calls tds7_build_param_def_from_query
 			 * should call also tds7_build_param_def_from_params ??
 			 */
 			param_definition = tds7_build_param_def_from_query(tds, converted_query, converted_query_len, params, &definition_len);
-		}
-		if (!param_definition) {
-			tds_convert_string_free(query, converted_query);
-			tds_set_state(tds, TDS_IDLE);
-			return TDS_FAIL;
+			if (!param_definition) {
+				tds_convert_string_free(query, converted_query);
+				tds_set_state(tds, TDS_IDLE);
+				return TDS_FAIL;
+			}
 		}
  
 		if (tds_start_query_head(tds, TDS_RPC, head) != TDS_SUCCESS) {
@@ -769,12 +775,6 @@ tds_get_column_declaration(TDSSOCKET * tds, TDSCOLUMN * curcol, char *out)
 	case SYBDATETIME:
 		fmt = "DATETIME";
 		break;
-	case SYBDATE:
-		fmt = "DATE";
-		break;
-	case SYBTIME:
-		fmt = "TIME";
-		break;
 	case SYBBIT:
 		fmt = "BIT";
 		break;
@@ -859,12 +859,6 @@ tds_get_column_declaration(TDSSOCKET * tds, TDSCOLUMN * curcol, char *out)
 	case SYBMSDATETIMEOFFSET:
 		fmt = "DATETIMEOFFSET";
 		break;
-	case SYB5BIGTIME:
-		fmt = "BIGTIME";
-		break;
-	case SYB5BIGDATETIME:
-		fmt = "BIGDATETIME";
-		break;
 	case SYBUINT2:
 		fmt = "UNSIGNED SMALLINT";
 		break;
@@ -901,7 +895,6 @@ tds_get_column_declaration(TDSSOCKET * tds, TDSCOLUMN * curcol, char *out)
 
 /**
  * Return string with parameters definition, useful for TDS7+
- * Looks like "@P1 INT, @P2 VARCHAR(100)"
  * \param tds     state information for the socket and the TDS protocol
  * \param converted_query     query to send to server in ucs2 encoding
  * \param converted_query_len query length in bytes
@@ -927,7 +920,7 @@ tds7_build_param_def_from_query(TDSSOCKET * tds, const char* converted_query, si
 
 	count = tds_count_placeholders_ucs2le(converted_query, converted_query + converted_query_len);
 	
-	param_str = tds_new(char, 512);
+	param_str = (char *) malloc(512);
 	if (!param_str)
 		return NULL;
 
@@ -938,7 +931,7 @@ tds7_build_param_def_from_query(TDSSOCKET * tds, const char* converted_query, si
 		}
 
 		/* realloc on insufficient space */
-		while ((len + (2u * sizeof(declaration))) > size) {
+		while ((len + (2u * 40u)) > size) {
 			size += 512u;
 			if (!TDS_RESIZE(param_str, size))
 				goto Cleanup;
@@ -994,34 +987,36 @@ tds7_build_param_def_from_params(TDSSOCKET * tds, const char* query, size_t quer
 	if (params)
 		CHECK_PARAMINFO_EXTRA(params);
  
-	param_str = tds_new(char, 512);
+	param_str = (char *) malloc(512);
 	if (!param_str)
 		goto Cleanup;
 
-	if (!params || !params->num_cols)
+	if (!params)
 		goto no_params;
 
 	/* try to detect missing names */
-	ids = tds_new0(struct tds_ids, params->num_cols);
-	if (!ids)
-		goto Cleanup;
-	if (tds_dstr_isempty(&params->columns[0]->column_name)) {
-		const char *s = query, *e, *id_end;
-		const char *query_end = query + query_len;
+	if (params->num_cols) {
+		ids = (struct tds_ids *) calloc(params->num_cols, sizeof(struct tds_ids));
+		if (!ids)
+			goto Cleanup;
+		if (tds_dstr_isempty(&params->columns[0]->column_name)) {
+			const char *s = query, *e, *id_end;
+			const char *query_end = query + query_len;
 
-		for (i = 0;  i < params->num_cols; s = e + 2) {
-			e = tds_next_placeholder_ucs2le(s, query_end, 1);
-			if (e == query_end)
-				break;
-			if (e[0] != '@')
-				continue;
-			/* find end of param name */
-			for (id_end = e + 2; id_end != query_end; id_end += 2)
-				if (!id_end[1] && (id_end[0] != '_' && id_end[1] != '#' && !isalnum((unsigned char) id_end[0])))
+			for (i = 0;  i < params->num_cols; s = e + 2) {
+				e = tds_next_placeholder_ucs2le(s, query_end, 1);
+				if (e == query_end)
 					break;
-			ids[i].p = e;
-			ids[i].len = id_end - e;
-			++i;
+				if (e[0] != '@')
+					continue;
+				/* find end of param name */
+				for (id_end = e + 2; id_end != query_end; id_end += 2)
+					if (!id_end[1] && (id_end[0] != '_' && id_end[1] != '#' && !isalnum((unsigned char) id_end[0])))
+						break;
+				ids[i].p = e;
+				ids[i].len = id_end - e;
+				++i;
+			}
 		}
 	}
  
@@ -1037,7 +1032,7 @@ tds7_build_param_def_from_params(TDSSOCKET * tds, const char* query, size_t quer
  
 		/* realloc on insufficient space */
 		il = ids[i].p ? ids[i].len : 2 * tds_dstr_len(&params->columns[i]->column_name);
-		while ((l + (2u * sizeof(declaration)) + il) > size) {
+		while ((l + (2u * 40u) + il) > size) {
 			size += 512u;
 			if (!TDS_RESIZE(param_str, size))
 				goto Cleanup;
@@ -1052,8 +1047,8 @@ tds7_build_param_def_from_params(TDSSOCKET * tds, const char* query, size_t quer
 			il = tds_dstr_len(&params->columns[i]->column_name);
 			ob = param_str + l;
 			ol = size - l;
-			memset(&tds->conn->char_convs[client2ucs2]->suppress, 0, sizeof(tds->conn->char_convs[client2ucs2]->suppress));
-			if (tds_iconv(tds, tds->conn->char_convs[client2ucs2], to_server, &ib, &il, &ob, &ol) == (size_t) - 1)
+			memset(&tds->conn->char_convs[iso2server_metadata]->suppress, 0, sizeof(tds->conn->char_convs[iso2server_metadata]->suppress));
+			if (tds_iconv(tds, tds->conn->char_convs[iso2server_metadata], to_server, &ib, &il, &ob, &ol) == (size_t) - 1)
 				goto Cleanup;
 			l = size - ol;
 		}
@@ -1384,8 +1379,8 @@ tds_submit_execdirect(TDSSOCKET * tds, const char *query, TDSPARAMINFO * params,
 
 	if (!dyn)
 		return TDS_FAIL;
-	/* check if no parameters */
-	if (params && !params->num_cols)
+	/* check is no parameters */
+	if (params &&  !params->num_cols)
 		params = NULL;
 
 	/* TDS 4.2, emulate prepared statements */
@@ -1396,25 +1391,21 @@ tds_submit_execdirect(TDSSOCKET * tds, const char *query, TDSPARAMINFO * params,
 	if (!IS_TDS50(tds->conn) || params) {
 		TDSRET ret = TDS_SUCCESS;
 
-		if (!params) {
-			ret = tds_submit_query(tds, query);
-		} else {
-			dyn->emulated = 1;
-			dyn->params = params;
-			dyn->query = strdup(query);
-			if (!dyn->query)
+		dyn->emulated = 1;
+		dyn->params = params;
+		dyn->query = strdup(query);
+		if (!dyn->query)
+			ret = TDS_FAIL;
+		if (TDS_SUCCEED(ret))
+			if (tds_set_state(tds, TDS_WRITING) != TDS_WRITING)
 				ret = TDS_FAIL;
+		if (TDS_SUCCEED(ret)) {
+			ret = tds_send_emulated_execute(tds, dyn->query, dyn->params);
 			if (TDS_SUCCEED(ret))
-				if (tds_set_state(tds, TDS_WRITING) != TDS_WRITING)
-					ret = TDS_FAIL;
-			if (TDS_SUCCEED(ret)) {
-				ret = tds_send_emulated_execute(tds, dyn->query, dyn->params);
-				if (TDS_SUCCEED(ret))
-					ret = tds_query_flush_packet(tds);
-			}
-			/* do not free our parameters */
-			dyn->params = NULL;
+				ret = tds_query_flush_packet(tds);
 		}
+		/* do not free our parameters */
+		dyn->params = NULL;
 		tds_dynamic_deallocated(tds->conn, dyn);
 		tds_release_dynamic(&dyn);
 		return ret;
@@ -1640,18 +1631,16 @@ tds_put_data_info(TDSSOCKET * tds, TDSCOLUMN * curcol, int flags)
 	 */
 
 	tdsdump_log(TDS_DBG_ERROR, "tds_put_data_info putting status \n");
-	if (flags & TDS_PUT_DATA_LONG_STATUS)
-		tds_put_int(tds, curcol->column_output);	/* status (input) */
-	else
-		tds_put_byte(tds, curcol->column_output);	/* status (input) */
+	tds_put_byte(tds, curcol->column_output);	/* status (input) */
 	if (!IS_TDS7_PLUS(tds->conn))
 		tds_put_int(tds, curcol->column_usertype);	/* usertype */
+	/* FIXME: column_type is wider than one byte.  Do something sensible, not just lop off the high byte. */
 	tds_put_byte(tds, curcol->on_server.column_type);
 
 	if (curcol->funcs->put_info(tds, curcol) != TDS_SUCCESS)
 		return TDS_FAIL;
 
-	/* TODO needed in TDS4.2 ?? now is called only if TDS >= 5 */
+	/* TODO needed in TDS4.2 ?? now is called only is TDS >= 5 */
 	if (!IS_TDS7_PLUS(tds->conn))
 		tds_put_byte(tds, 0x00);	/* locale info length */
 
@@ -1681,7 +1670,11 @@ tds_put_data_info_length(TDSSOCKET * tds, TDSCOLUMN * curcol, int flags)
 	/* TODO ICONV convert string if needed (see also tds_put_data_info) */
 	if (flags & TDS_PUT_DATA_USE_NAME)
 		len += tds_dstr_len(&curcol->column_name);
-	return len + curcol->funcs->put_info_len(tds, curcol);
+	if (is_numeric_type(curcol->on_server.column_type))
+		len += 2;
+	if (curcol->column_varint_size == 5)
+		return len + 4;
+	return len + curcol->column_varint_size;
 }
 
 /**
@@ -1799,25 +1792,17 @@ static void
 tds_put_params(TDSSOCKET * tds, TDSPARAMINFO * info, int flags)
 {
 	int i, len;
-	bool wide;
 
 	CHECK_TDS_EXTRA(tds);
 	CHECK_PARAMINFO_EXTRA(info);
 
-	wide = !!tds_capability_has_req(tds->conn, TDS_REQ_WIDETABLE);
-
 	/* column descriptions */
-	tds_put_byte(tds, wide ? TDS5_PARAMFMT2_TOKEN : TDS5_PARAMFMT_TOKEN);
+	tds_put_byte(tds, TDS5_PARAMFMT_TOKEN);
 	/* size */
 	len = 2;
 	for (i = 0; i < info->num_cols; i++)
 		len += tds_put_data_info_length(tds, info->columns[i], flags);
-	if (wide) {
-		tds_put_int(tds, len + 3 * info->num_cols);
-		flags |= TDS_PUT_DATA_LONG_STATUS;
-	} else {
-		tds_put_smallint(tds, len);
-	}
+	tds_put_smallint(tds, len);
 	/* number of parameters */
 	tds_put_smallint(tds, info->num_cols);
 	/* column detail for each parameter */
@@ -2128,6 +2113,7 @@ TDSRET
 tds_send_cancel(TDSSOCKET * tds)
 {
 #if ENABLE_ODBC_MARS
+	static const char one = 1;
 	CHECK_TDS_EXTRA(tds);
 
 	tdsdump_log(TDS_DBG_FUNC, "tds_send_cancel: %sin_cancel and %sidle\n", 
@@ -2143,14 +2129,14 @@ tds_send_cancel(TDSSOCKET * tds)
 	if (tds_mutex_trylock(&tds->conn->list_mtx)) {
 		/* TODO check */
 		/* signal other socket */
-		tds_wakeup_send(&tds->conn->wakeup, 1);
+		send(tds->conn->s_signal, (const void*) &one, sizeof(one), 0);
 		return TDS_SUCCESS;
 	}
 	if (tds->conn->in_net_tds) {
 		tds_mutex_unlock(&tds->conn->list_mtx);
 		/* TODO check */
 		/* signal other socket */
-		tds_wakeup_send(&tds->conn->wakeup, 1);
+		send(tds->conn->s_signal, (const void*) &one, sizeof(one), 0);
 		return TDS_SUCCESS;
 	}
 	tds_mutex_unlock(&tds->conn->list_mtx);
@@ -2186,14 +2172,12 @@ tds_send_cancel(TDSSOCKET * tds)
 	 * this means that either:
 	 * - another thread is processing data
 	 * - we got called from a signal inside processing thread
-	 * - we got called from message handler
 	 */
 	if (tds_mutex_trylock(&tds->wire_mtx)) {
+		static const char one = '1';
 		/* TODO check */
-		if (!tds->in_cancel)
-			tds->in_cancel = 1;
 		/* signal other socket */
-		tds_wakeup_send(&tds->conn->wakeup, 1);
+		send(tds->conn->s_signal, (const void*) &one, sizeof(one), 0);
 		return TDS_SUCCESS;
 	}
 
@@ -3201,8 +3185,8 @@ tds_put_param_as_string(TDSSOCKET * tds, TDSPARAMINFO * params, int n)
 	CHECK_PARAMINFO_EXTRA(params);
 
 	if (src_len < 0) {
-		/* on TDS 4 TEXT/IMAGE cannot be NULL, use empty */
-		if (!IS_TDS50_PLUS(tds->conn) && is_blob_type(curcol->column_type))
+		/* on TDS 4 and 5 TEXT/IMAGE cannot be NULL, use empty */
+		if (!IS_TDS7_PLUS(tds->conn) && (curcol->column_type == SYBIMAGE || curcol->column_type == SYBTEXT))
 			tds_put_string(tds, "''", 2);
 		else
 			tds_put_string(tds, "NULL", 4);
@@ -3268,20 +3252,13 @@ tds_put_param_as_string(TDSSOCKET * tds, TDSPARAMINFO * params, int n)
 	case SYBMSDATE:
 	case SYBMSDATETIME2:
 	case SYBMSDATETIMEOFFSET:
-	case SYBTIME:
-	case SYBDATE:
-	case SYB5BIGTIME:
-	case SYB5BIGDATETIME:
 		/* TODO use an ISO context */
 	case SYBUNIQUE:
 		quote = 1;
 	default:
 		res = tds_convert(tds_get_ctx(tds), tds_get_conversion_type(curcol->column_type, curcol->column_size), src, src_len, SYBCHAR, &cr);
-		if (res < 0) {
-			if (converted)
-				tds_convert_string_free(save_src, src);
+		if (res < 0)
 			return TDS_FAIL;
-		}
 		if (quote)
 			tds_put_string(tds, "\'", 1);
 		tds_quote_and_put(tds, cr.c, cr.c + res);
@@ -3421,6 +3398,13 @@ TDSRET
 tds_submit_optioncmd(TDSSOCKET * tds, TDS_OPTION_CMD command, TDS_OPTION option, TDS_OPTION_ARG *param, TDS_INT param_size)
 {
 	char cmd[128];
+	char datefmt[4];
+	TDS_INT resulttype;
+	TDSCOLUMN *col;
+	CONV_RESULT dres;
+	int ctype;
+	unsigned char*src;
+	int srclen;
  
 	CHECK_TDS_EXTRA(tds);
  
@@ -3447,248 +3431,237 @@ tds_submit_optioncmd(TDSSOCKET * tds, TDS_OPTION_CMD command, TDS_OPTION option,
 		rc = tds_process_simple_query(tds);
 		if (TDS_FAILED(rc))
 			return rc;
-		return TDS_SUCCESS;
 	}
  
-	if (!IS_TDS7_PLUS(tds->conn))
-		return TDS_SUCCESS;
+	if (IS_TDS7_PLUS(tds->conn)) {
+		if (command == TDS_OPT_SET) {
+			TDSRET rc;
 
-	cmd[0] = 0;
-	if (command == TDS_OPT_SET) {
-		TDSRET rc;
-		char datefmt[4];
-
-		switch (option) {
-		case TDS_OPT_ANSINULL :
-			sprintf(cmd, "SET ANSI_NULLS %s", param->ti ? "ON" : "OFF");
-			break;
-		case TDS_OPT_ARITHABORTON :
-			strcpy(cmd, "SET ARITHABORT ON");
-			break;
-		case TDS_OPT_ARITHABORTOFF :
-			strcpy(cmd, "SET ARITHABORT OFF");
-			break;
-		case TDS_OPT_ARITHIGNOREON :
-			strcpy(cmd, "SET ARITHIGNORE ON");
-			break;
-		case TDS_OPT_ARITHIGNOREOFF :
-			strcpy(cmd, "SET ARITHIGNORE OFF");
-			break;
-		case TDS_OPT_CHAINXACTS :
-			sprintf(cmd, "SET IMPLICIT_TRANSACTIONS %s", param->ti ? "ON" : "OFF");
-			break;
-		case TDS_OPT_CURCLOSEONXACT :
-			sprintf(cmd, "SET CURSOR_CLOSE_ON_COMMIT %s", param->ti ? "ON" : "OFF");
-			break;
-		case TDS_OPT_NOCOUNT :
-			sprintf(cmd, "SET NOCOUNT %s", param->ti ? "ON" : "OFF");
-			break;
-		case TDS_OPT_QUOTED_IDENT :
-			sprintf(cmd, "SET QUOTED_IDENTIFIER %s", param->ti ? "ON" : "OFF");
-			break;
-		case TDS_OPT_TRUNCABORT :
-			sprintf(cmd, "SET ANSI_WARNINGS %s", param->ti ? "OFF" : "ON");
-			break;
-		case TDS_OPT_DATEFIRST :
-			sprintf(cmd, "SET DATEFIRST %d", param->ti);
-			break;
-		case TDS_OPT_DATEFORMAT :
-			 switch (param->ti) {
-				case TDS_OPT_FMTDMY: strcpy(datefmt,"dmy"); break;
-				case TDS_OPT_FMTDYM: strcpy(datefmt,"dym"); break;
-				case TDS_OPT_FMTMDY: strcpy(datefmt,"mdy"); break;
-				case TDS_OPT_FMTMYD: strcpy(datefmt,"myd"); break;
-				case TDS_OPT_FMTYDM: strcpy(datefmt,"ydm"); break;
-				case TDS_OPT_FMTYMD: strcpy(datefmt,"ymd"); break;
-			}
-			sprintf(cmd, "SET DATEFORMAT %s", datefmt);
-			break;
-		case TDS_OPT_TEXTSIZE:
-			sprintf(cmd, "SET TEXTSIZE %d", (int) param->i);
-			break;
-		/* TODO */
-		case TDS_OPT_STAT_TIME:
-		case TDS_OPT_STAT_IO:
-		case TDS_OPT_ROWCOUNT:
-		case TDS_OPT_NATLANG:
-		case TDS_OPT_ISOLATION:
-		case TDS_OPT_AUTHON:
-		case TDS_OPT_CHARSET:
-		case TDS_OPT_SHOWPLAN:
-		case TDS_OPT_NOEXEC:
-		case TDS_OPT_PARSEONLY:
-		case TDS_OPT_GETDATA:
-		case TDS_OPT_FORCEPLAN:
-		case TDS_OPT_FORMATONLY:
-		case TDS_OPT_FIPSFLAG:
-		case TDS_OPT_RESTREES:
-		case TDS_OPT_IDENTITYON:
-		case TDS_OPT_CURREAD:
-		case TDS_OPT_CURWRITE:
-		case TDS_OPT_IDENTITYOFF:
-		case TDS_OPT_AUTHOFF:
-			break;
-		}
-		tds_submit_query(tds, cmd);
-		rc = tds_process_simple_query(tds);
-		if (TDS_FAILED(rc))
-			return rc;
-	}
-	if (command == TDS_OPT_LIST) {
-		int optionval = 0;
-		TDS_INT resulttype;
-
-		switch (option) {
-		case TDS_OPT_ANSINULL :
-		case TDS_OPT_ARITHABORTON :
-		case TDS_OPT_ARITHABORTOFF :
-		case TDS_OPT_ARITHIGNOREON :
-		case TDS_OPT_ARITHIGNOREOFF :
-		case TDS_OPT_CHAINXACTS :
-		case TDS_OPT_CURCLOSEONXACT :
-		case TDS_OPT_NOCOUNT :
-		case TDS_OPT_QUOTED_IDENT :
-		case TDS_OPT_TRUNCABORT :
-			tdsdump_log(TDS_DBG_FUNC, "SELECT @@options\n");
-			strcpy(cmd, "SELECT @@options");
-			break;
-		case TDS_OPT_DATEFIRST :
-			strcpy(cmd, "SELECT @@datefirst");
-			break;
-		case TDS_OPT_DATEFORMAT :
-			strcpy(cmd, "SELECT DATEPART(dy,'01/02/03')");
-			break;
-		case TDS_OPT_TEXTSIZE:
-			strcpy(cmd, "SELECT @@textsize");
-			break;
-		/* TODO */
-		case TDS_OPT_STAT_TIME:
-		case TDS_OPT_STAT_IO:
-		case TDS_OPT_ROWCOUNT:
-		case TDS_OPT_NATLANG:
-		case TDS_OPT_ISOLATION:
-		case TDS_OPT_AUTHON:
-		case TDS_OPT_CHARSET:
-		case TDS_OPT_SHOWPLAN:
-		case TDS_OPT_NOEXEC:
-		case TDS_OPT_PARSEONLY:
-		case TDS_OPT_GETDATA:
-		case TDS_OPT_FORCEPLAN:
-		case TDS_OPT_FORMATONLY:
-		case TDS_OPT_FIPSFLAG:
-		case TDS_OPT_RESTREES:
-		case TDS_OPT_IDENTITYON:
-		case TDS_OPT_CURREAD:
-		case TDS_OPT_CURWRITE:
-		case TDS_OPT_IDENTITYOFF:
-		case TDS_OPT_AUTHOFF:
-		default:
-			tdsdump_log(TDS_DBG_FUNC, "what!\n");
-		}
-		tds_submit_query(tds, cmd);
-		while (tds_process_tokens(tds, &resulttype, NULL, TDS_TOKEN_RESULTS) == TDS_SUCCESS) {
-			switch (resulttype) {
-			case TDS_ROWFMT_RESULT:
+			switch (option) {
+			case TDS_OPT_ANSINULL :
+				sprintf(cmd, "SET ANSI_NULLS %s", param->ti ? "ON" : "OFF");
 				break;
-			case TDS_ROW_RESULT:
-				while (tds_process_tokens(tds, &resulttype, NULL, TDS_STOPAT_ROWFMT|TDS_RETURN_DONE|TDS_RETURN_ROW) == TDS_SUCCESS) {
-					TDSCOLUMN *col;
-					CONV_RESULT dres;
-					int ctype;
-					unsigned char* src;
-					int srclen;
+			case TDS_OPT_ARITHABORTON :
+				strcpy(cmd, "SET ARITHABORT ON");
+				break;
+			case TDS_OPT_ARITHABORTOFF :
+				strcpy(cmd, "SET ARITHABORT OFF");
+				break;
+			case TDS_OPT_ARITHIGNOREON :
+				strcpy(cmd, "SET ARITHIGNORE ON");
+				break;
+			case TDS_OPT_ARITHIGNOREOFF :
+				strcpy(cmd, "SET ARITHIGNORE OFF");
+				break;
+			case TDS_OPT_CHAINXACTS :
+				sprintf(cmd, "SET IMPLICIT_TRANSACTIONS %s", param->ti ? "ON" : "OFF");
+				break;
+			case TDS_OPT_CURCLOSEONXACT :
+				sprintf(cmd, "SET CURSOR_CLOSE_ON_COMMIT %s", param->ti ? "ON" : "OFF");
+				break;
+			case TDS_OPT_NOCOUNT :
+				sprintf(cmd, "SET NOCOUNT %s", param->ti ? "ON" : "OFF");
+				break;
+			case TDS_OPT_QUOTED_IDENT :
+				sprintf(cmd, "SET QUOTED_IDENTIFIER %s", param->ti ? "ON" : "OFF");
+				break;
+			case TDS_OPT_TRUNCABORT :
+				sprintf(cmd, "SET ANSI_WARNINGS %s", param->ti ? "OFF" : "ON");
+				break;
+			case TDS_OPT_DATEFIRST :
+				sprintf(cmd, "SET DATEFIRST %d", param->ti);
+				break;
+			case TDS_OPT_DATEFORMAT :
+				 switch (param->ti) {
+					case TDS_OPT_FMTDMY: strcpy(datefmt,"dmy"); break;
+					case TDS_OPT_FMTDYM: strcpy(datefmt,"dym"); break;
+					case TDS_OPT_FMTMDY: strcpy(datefmt,"mdy"); break;
+					case TDS_OPT_FMTMYD: strcpy(datefmt,"myd"); break;
+					case TDS_OPT_FMTYDM: strcpy(datefmt,"ydm"); break;
+					case TDS_OPT_FMTYMD: strcpy(datefmt,"ymd"); break;
+				}
+				sprintf(cmd, "SET DATEFORMAT %s", datefmt);
+				break;
+			case TDS_OPT_TEXTSIZE:
+				sprintf(cmd, "SET TEXTSIZE %d", (int) param->i);
+				break;
+			/* TODO */
+			case TDS_OPT_STAT_TIME:
+			case TDS_OPT_STAT_IO:
+			case TDS_OPT_ROWCOUNT:
+			case TDS_OPT_NATLANG:
+			case TDS_OPT_ISOLATION:
+			case TDS_OPT_AUTHON:
+			case TDS_OPT_CHARSET:
+			case TDS_OPT_SHOWPLAN:
+			case TDS_OPT_NOEXEC:
+			case TDS_OPT_PARSEONLY:
+			case TDS_OPT_GETDATA:
+			case TDS_OPT_FORCEPLAN:
+			case TDS_OPT_FORMATONLY:
+			case TDS_OPT_FIPSFLAG:
+			case TDS_OPT_RESTREES:
+			case TDS_OPT_IDENTITYON:
+			case TDS_OPT_CURREAD:
+			case TDS_OPT_CURWRITE:
+			case TDS_OPT_IDENTITYOFF:
+			case TDS_OPT_AUTHOFF:
+				break;
+			}
+			tds_submit_query(tds, cmd);
+			rc = tds_process_simple_query(tds);
+			if (TDS_FAILED(rc))
+				return rc;
+		}
+		if (command == TDS_OPT_LIST) {
+			int optionval = 0;
 
-					if (resulttype != TDS_ROW_RESULT)
-						break;
-
-					if (!tds->current_results)
-						continue;
-
-					col = tds->current_results->columns[0];
-					ctype = tds_get_conversion_type(col->column_type, col->column_size);
-
-					src = col->column_data;
-					srclen = col->column_cur_size;
-
-
-					tds_convert(tds_get_ctx(tds), ctype, (TDS_CHAR *) src, srclen, SYBINT4, &dres);
-					optionval = dres.i;
+			switch (option) {
+			case TDS_OPT_ANSINULL :
+			case TDS_OPT_ARITHABORTON :
+			case TDS_OPT_ARITHABORTOFF :
+			case TDS_OPT_ARITHIGNOREON :
+			case TDS_OPT_ARITHIGNOREOFF :
+			case TDS_OPT_CHAINXACTS :
+			case TDS_OPT_CURCLOSEONXACT :
+			case TDS_OPT_NOCOUNT :
+			case TDS_OPT_QUOTED_IDENT :
+			case TDS_OPT_TRUNCABORT :
+				tdsdump_log(TDS_DBG_FUNC, "SELECT @@options\n");
+				strcpy(cmd, "SELECT @@options");
+				break;
+			case TDS_OPT_DATEFIRST :
+				strcpy(cmd, "SELECT @@datefirst");
+				break;
+			case TDS_OPT_DATEFORMAT :
+				strcpy(cmd, "SELECT DATEPART(dy,'01/02/03')");
+				break;
+			case TDS_OPT_TEXTSIZE:
+				strcpy(cmd, "SELECT @@textsize");
+				break;
+			/* TODO */
+			case TDS_OPT_STAT_TIME:
+			case TDS_OPT_STAT_IO:
+			case TDS_OPT_ROWCOUNT:
+			case TDS_OPT_NATLANG:
+			case TDS_OPT_ISOLATION:
+			case TDS_OPT_AUTHON:
+			case TDS_OPT_CHARSET:
+			case TDS_OPT_SHOWPLAN:
+			case TDS_OPT_NOEXEC:
+			case TDS_OPT_PARSEONLY:
+			case TDS_OPT_GETDATA:
+			case TDS_OPT_FORCEPLAN:
+			case TDS_OPT_FORMATONLY:
+			case TDS_OPT_FIPSFLAG:
+			case TDS_OPT_RESTREES:
+			case TDS_OPT_IDENTITYON:
+			case TDS_OPT_CURREAD:
+			case TDS_OPT_CURWRITE:
+			case TDS_OPT_IDENTITYOFF:
+			case TDS_OPT_AUTHOFF:
+			default:
+				tdsdump_log(TDS_DBG_FUNC, "what!\n");
+			}
+			tds_submit_query(tds, cmd);
+			while (tds_process_tokens(tds, &resulttype, NULL, TDS_TOKEN_RESULTS) == TDS_SUCCESS) {
+				switch (resulttype) {
+				case TDS_ROWFMT_RESULT:
+					break;
+				case TDS_ROW_RESULT:
+					while (tds_process_tokens(tds, &resulttype, NULL, TDS_STOPAT_ROWFMT|TDS_RETURN_DONE|TDS_RETURN_ROW) == TDS_SUCCESS) {
+						if (resulttype != TDS_ROW_RESULT)
+							break;
+ 
+						if (!tds->current_results)
+							continue;
+ 
+						col = tds->current_results->columns[0];
+						ctype = tds_get_conversion_type(col->column_type, col->column_size);
+ 
+						src = col->column_data;
+						srclen = col->column_cur_size;
+ 
+ 
+						tds_convert(tds_get_ctx(tds), ctype, (TDS_CHAR *) src, srclen, SYBINT4, &dres);
+						optionval = dres.i;
+					}
+					break;
+				default:
+					break;
+				}
+			}
+			tdsdump_log(TDS_DBG_FUNC, "optionval = %d\n", optionval);
+			switch (option) {
+			case TDS_OPT_CHAINXACTS :
+				tds->option_value = (optionval & 0x02) > 0;
+				break;
+			case TDS_OPT_CURCLOSEONXACT :
+				tds->option_value = (optionval & 0x04) > 0;
+				break;
+			case TDS_OPT_TRUNCABORT :
+				tds->option_value = (optionval & 0x08) > 0;
+				break;
+			case TDS_OPT_ANSINULL :
+				tds->option_value = (optionval & 0x20) > 0;
+				break;
+			case TDS_OPT_ARITHABORTON :
+				tds->option_value = (optionval & 0x40) > 0;
+				break;
+			case TDS_OPT_ARITHABORTOFF :
+				tds->option_value = (optionval & 0x40) > 0;
+				break;
+			case TDS_OPT_ARITHIGNOREON :
+				tds->option_value = (optionval & 0x80) > 0;
+				break;
+			case TDS_OPT_ARITHIGNOREOFF :
+				tds->option_value = (optionval & 0x80) > 0;
+				break;
+			case TDS_OPT_QUOTED_IDENT :
+				tds->option_value = (optionval & 0x0100) > 0;
+				break;
+			case TDS_OPT_NOCOUNT :
+				tds->option_value = (optionval & 0x0200) > 0;
+				break;
+			case TDS_OPT_TEXTSIZE:
+			case TDS_OPT_DATEFIRST :
+				tds->option_value = optionval;
+				break;
+			case TDS_OPT_DATEFORMAT :
+				switch (optionval) {
+				case 61: tds->option_value = TDS_OPT_FMTYDM; break;
+				case 34: tds->option_value = TDS_OPT_FMTYMD; break;
+				case 32: tds->option_value = TDS_OPT_FMTDMY; break;
+				case 60: tds->option_value = TDS_OPT_FMTYDM; break;
+				case 2:  tds->option_value = TDS_OPT_FMTMDY; break;
+				case 3:  tds->option_value = TDS_OPT_FMTMYD; break;
 				}
 				break;
-			default:
+			/* TODO */
+			case TDS_OPT_STAT_TIME:
+			case TDS_OPT_STAT_IO:
+			case TDS_OPT_ROWCOUNT:
+			case TDS_OPT_NATLANG:
+			case TDS_OPT_ISOLATION:
+			case TDS_OPT_AUTHON:
+			case TDS_OPT_CHARSET:
+			case TDS_OPT_SHOWPLAN:
+			case TDS_OPT_NOEXEC:
+			case TDS_OPT_PARSEONLY:
+			case TDS_OPT_GETDATA:
+			case TDS_OPT_FORCEPLAN:
+			case TDS_OPT_FORMATONLY:
+			case TDS_OPT_FIPSFLAG:
+			case TDS_OPT_RESTREES:
+			case TDS_OPT_IDENTITYON:
+			case TDS_OPT_CURREAD:
+			case TDS_OPT_CURWRITE:
+			case TDS_OPT_IDENTITYOFF:
+			case TDS_OPT_AUTHOFF:
 				break;
 			}
+			tdsdump_log(TDS_DBG_FUNC, "tds_submit_optioncmd: returned option_value = %d\n", tds->option_value);
 		}
-		tdsdump_log(TDS_DBG_FUNC, "optionval = %d\n", optionval);
-		switch (option) {
-		case TDS_OPT_CHAINXACTS :
-			tds->option_value = (optionval & 0x02) > 0;
-			break;
-		case TDS_OPT_CURCLOSEONXACT :
-			tds->option_value = (optionval & 0x04) > 0;
-			break;
-		case TDS_OPT_TRUNCABORT :
-			tds->option_value = (optionval & 0x08) > 0;
-			break;
-		case TDS_OPT_ANSINULL :
-			tds->option_value = (optionval & 0x20) > 0;
-			break;
-		case TDS_OPT_ARITHABORTON :
-			tds->option_value = (optionval & 0x40) > 0;
-			break;
-		case TDS_OPT_ARITHABORTOFF :
-			tds->option_value = (optionval & 0x40) > 0;
-			break;
-		case TDS_OPT_ARITHIGNOREON :
-			tds->option_value = (optionval & 0x80) > 0;
-			break;
-		case TDS_OPT_ARITHIGNOREOFF :
-			tds->option_value = (optionval & 0x80) > 0;
-			break;
-		case TDS_OPT_QUOTED_IDENT :
-			tds->option_value = (optionval & 0x0100) > 0;
-			break;
-		case TDS_OPT_NOCOUNT :
-			tds->option_value = (optionval & 0x0200) > 0;
-			break;
-		case TDS_OPT_TEXTSIZE:
-		case TDS_OPT_DATEFIRST :
-			tds->option_value = optionval;
-			break;
-		case TDS_OPT_DATEFORMAT :
-			switch (optionval) {
-			case 61: tds->option_value = TDS_OPT_FMTYDM; break;
-			case 34: tds->option_value = TDS_OPT_FMTYMD; break;
-			case 32: tds->option_value = TDS_OPT_FMTDMY; break;
-			case 60: tds->option_value = TDS_OPT_FMTYDM; break;
-			case 2:  tds->option_value = TDS_OPT_FMTMDY; break;
-			case 3:  tds->option_value = TDS_OPT_FMTMYD; break;
-			}
-			break;
-		/* TODO */
-		case TDS_OPT_STAT_TIME:
-		case TDS_OPT_STAT_IO:
-		case TDS_OPT_ROWCOUNT:
-		case TDS_OPT_NATLANG:
-		case TDS_OPT_ISOLATION:
-		case TDS_OPT_AUTHON:
-		case TDS_OPT_CHARSET:
-		case TDS_OPT_SHOWPLAN:
-		case TDS_OPT_NOEXEC:
-		case TDS_OPT_PARSEONLY:
-		case TDS_OPT_GETDATA:
-		case TDS_OPT_FORCEPLAN:
-		case TDS_OPT_FORMATONLY:
-		case TDS_OPT_FIPSFLAG:
-		case TDS_OPT_RESTREES:
-		case TDS_OPT_IDENTITYON:
-		case TDS_OPT_CURREAD:
-		case TDS_OPT_CURWRITE:
-		case TDS_OPT_IDENTITYOFF:
-		case TDS_OPT_AUTHOFF:
-			break;
-		}
-		tdsdump_log(TDS_DBG_FUNC, "tds_submit_optioncmd: returned option_value = %d\n", tds->option_value);
 	}
 	return TDS_SUCCESS;
 }
@@ -3783,7 +3756,7 @@ tds_submit_commit(TDSSOCKET *tds, int cont)
 	return tds_query_flush_packet(tds);
 }
 
-static const TDSCONTEXT empty_ctx = {0};
+static const TDSCONTEXT empty_ctx;
 
 TDSRET
 tds_disconnect(TDSSOCKET * tds)

@@ -1,7 +1,6 @@
 #include "common.h"
 #include <ctype.h>
 #include "parser.h"
-#include <odbcss.h>
 
 /*
  * SQLDescribeCol test for precision
@@ -88,12 +87,6 @@ static struct lookup_int sql_types[] = {
 	TYPE(SQL_TYPE_TIME),
 	TYPE(SQL_TYPE_TIMESTAMP),
 	TYPE(SQL_DATETIME),
-	TYPE(SQL_SS_VARIANT),
-	TYPE(SQL_SS_UDT),
-	TYPE(SQL_SS_XML),
-	TYPE(SQL_SS_TABLE),
-	TYPE(SQL_SS_TIME2),
-	TYPE(SQL_SS_TIMESTAMPOFFSET),
 #undef TYPE
 	{ NULL, 0 }
 };
@@ -183,18 +176,11 @@ check_attr_ird(ATTR_PARAMS)
 		odbc_fatal(": failure not expected\n");
 	/* SQL_DESC_LENGTH is the same of SQLDescribeCol len */
 	if (attr->value == SQL_DESC_LENGTH) {
-		SQLSMALLINT scale, si;
-		SQLULEN prec;
-		CHKDescribeCol(1, NULL, 0, NULL, &si, &prec, &scale, &si, "S");
-		if (i != prec)
-			odbc_fatal(": attr %s SQLDescribeCol len %ld != SQLColAttribute len %ld\n", attr->name, (long) prec, (long) i);
-	}
-	if (attr->value == SQL_DESC_SCALE) {
-		SQLSMALLINT scale, si;
-		SQLULEN prec;
-		CHKDescribeCol(1, NULL, 0, NULL, &si, &prec, &scale, &si, "S");
-		if (i != scale)
-			odbc_fatal(": attr %s SQLDescribeCol scale %ld != SQLColAttribute len %ld\n", attr->name, (long) scale, (long) i);
+		SQLSMALLINT si;
+		SQLULEN li;
+		CHKDescribeCol(1, NULL, 0, NULL, &si, &li, &si, &si, "S");
+		if (i != li)
+			odbc_fatal(": attr %s SQLDescribeCol len %ld != SQLColAttribute len %ld\n", attr->name, (long) li, (long) i);
 	}
 	if (i != lookup(expected_value, attr->lookup)) {
 		g_result = 1;
@@ -220,16 +206,16 @@ check_attr_ard(ATTR_PARAMS)
 	case type_INTEGER:
 		i = 0xdeadbeef;
 		ret = SQLGetDescField(desc, 1, attr->value, (SQLPOINTER) & i, sizeof(SQLINTEGER), &ind);
-		li = i;
 		break;
 	case type_SMALLINT:
 		si = 0xbeef;
 		ret = SQLGetDescField(desc, 1, attr->value, (SQLPOINTER) & si, sizeof(SQLSMALLINT), &ind);
-		li = si;
+		i = si;
 		break;
 	case type_LEN:
 		li = 0xdeadbeef;
 		ret = SQLGetDescField(desc, 1, attr->value, (SQLPOINTER) & li, sizeof(SQLLEN), &ind);
+		i = li;
 		break;
 	case type_CHARP:
 		ret = SQLGetDescField(desc, 1, attr->value, buf, sizeof(buf), &ind);
@@ -243,7 +229,7 @@ check_attr_ard(ATTR_PARAMS)
 	}
 	if (!SQL_SUCCEEDED(ret))
 		odbc_fatal(": failure not expected\n");
-	if (li != lookup(expected_value, attr->lookup)) {
+	if (i != lookup(expected_value, attr->lookup)) {
 		g_result = 1;
 		fprintf(stderr, "Line %u: invalid %s got %s expected %s\n", odbc_line_num, attr->name, unlookup(i, attr->lookup), expected_value);
 	}

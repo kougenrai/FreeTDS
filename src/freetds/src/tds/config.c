@@ -141,7 +141,7 @@ tds_read_config_info(TDSSOCKET * tds, TDSLOGIN * login, TDSLOCALE * locale)
 	char *path;
 	pid_t pid;
 	int opened = 0, found;
-	struct addrinfo *addrs;
+	struct tds_addrinfo *addrs;
 
 	/* allocate a new structure with hard coded and build-time defaults */
 	connection = tds_alloc_login(0);
@@ -252,8 +252,6 @@ tds_read_config_info(TDSSOCKET * tds, TDSLOGIN * login, TDSLOCALE * locale)
 		tdsdump_log(TDS_DBG_INFO1, "\t%20s = %s\n", "cafile", tds_dstr_cstr(&connection->cafile));
 		tdsdump_log(TDS_DBG_INFO1, "\t%20s = %s\n", "crlfile", tds_dstr_cstr(&connection->crlfile));
 		tdsdump_log(TDS_DBG_INFO1, "\t%20s = %d\n", "check_ssl_hostname", connection->check_ssl_hostname);
-		tdsdump_log(TDS_DBG_INFO1, "\t%20s = %s\n", "db_filename", tds_dstr_cstr(&connection->db_filename));
-		tdsdump_log(TDS_DBG_INFO1, "\t%20s = %d\n", "readonly_intent", connection->readonly_intent);
 
 		tdsdump_close();
 	}
@@ -389,7 +387,7 @@ tds_read_conf_file(TDSLOGIN * login, const char *server)
 static int
 tds_read_conf_sections(FILE * in, const char *server, TDSLOGIN * login)
 {
-	DSTR default_instance = DSTR_INITIALIZER;
+	DSTR default_instance;
 	int default_port;
 
 	int found;
@@ -400,6 +398,7 @@ tds_read_conf_sections(FILE * in, const char *server, TDSLOGIN * login)
 		return 0;
 	rewind(in);
 
+	tds_dstr_init(&default_instance);
 	if (!tds_dstr_dup(&default_instance, &login->instance_name))
 		return 0;
 	default_port = login->port;
@@ -438,7 +437,7 @@ static const struct {
 };
 
 int
-tds_parse_boolean(const char *value, int default_value)
+tds_config_boolean(const char *option, const char *value, TDSLOGIN *login)
 {
 	int p;
 
@@ -446,16 +445,6 @@ tds_parse_boolean(const char *value, int default_value)
 		if (!strcasecmp(value, boolean_values[p].value))
 			return boolean_values[p].to_return;
 	}
-	return default_value;
-}
-
-int
-tds_config_boolean(const char *option, const char *value, TDSLOGIN *login)
-{
-	int ret = tds_parse_boolean(value, -1);
-	if (ret >= 0)
-		return ret;
-
 	tdsdump_log(TDS_DBG_ERROR, "UNRECOGNIZED option value '%s' for boolean setting '%s'!\n",
 		    value, option);
 	login->valid_configuration = 0;
@@ -618,7 +607,7 @@ tds_parse_conf_section(const char *option, const char *value, void *param)
 			login->connect_timeout = atoi(value);
 	} else if (!strcmp(option, TDS_STR_HOST)) {
 		char tmp[128];
-		struct addrinfo *addrs;
+		struct tds_addrinfo *addrs;
 
 		if (TDS_FAILED(tds_lookup_host_set(value, &login->ip_addrs))) {
 			tdsdump_log(TDS_DBG_WARN, "Found host entry %s however name resolution failed. \n", value);
@@ -670,13 +659,6 @@ tds_parse_conf_section(const char *option, const char *value, void *param)
 		s = tds_dstr_copy(&login->crlfile, value);
 	} else if (!strcmp(option, TDS_STR_CHECKSSLHOSTNAME)) {
 		login->check_ssl_hostname = tds_config_boolean(option, value, login);
-	} else if (!strcmp(option, TDS_STR_DBFILENAME)) {
-		s = tds_dstr_copy(&login->db_filename, value);
-	} else if (!strcmp(option, TDS_STR_DATABASE)) {
-		s = tds_dstr_copy(&login->database, value);
-	} else if (!strcmp(option, TDS_STR_READONLY_INTENT)) {
-		login->readonly_intent = tds_config_boolean(option, value, login);
-		tdsdump_log(TDS_DBG_FUNC, "Setting ReadOnly Intent to '%s'.\n", value);
 	} else {
 		tdsdump_log(TDS_DBG_INFO1, "UNRECOGNIZED option '%s' ... ignoring.\n", option);
 	}
@@ -696,39 +678,39 @@ tds_config_login(TDSLOGIN * connection, TDSLOGIN * login)
 	}
 	if (login->tds_version)
 		connection->tds_version = login->tds_version;
-	if (res && !tds_dstr_isempty(&login->language)) {
+	if (!tds_dstr_isempty(&login->language)) {
 		res = tds_dstr_dup(&connection->language, &login->language);
 	}
-	if (res && !tds_dstr_isempty(&login->server_charset)) {
+	if (!tds_dstr_isempty(&login->server_charset)) {
 		res = tds_dstr_dup(&connection->server_charset, &login->server_charset);
 	}
-	if (res && !tds_dstr_isempty(&login->client_charset)) {
+	if (!tds_dstr_isempty(&login->client_charset)) {
 		res = tds_dstr_dup(&connection->client_charset, &login->client_charset);
 		tdsdump_log(TDS_DBG_INFO1, "tds_config_login: %s is %s.\n", "client_charset",
 			    tds_dstr_cstr(&connection->client_charset));
 	}
-	if (!login->use_utf16)
+	if (login->use_utf16)
 		connection->use_utf16 = login->use_utf16;
-	if (res && !tds_dstr_isempty(&login->database)) {
+	if (!tds_dstr_isempty(&login->database)) {
 		res = tds_dstr_dup(&connection->database, &login->database);
 		tdsdump_log(TDS_DBG_INFO1, "tds_config_login: %s is %s.\n", "database_name",
 			    tds_dstr_cstr(&connection->database));
 	}
-	if (res && !tds_dstr_isempty(&login->client_host_name)) {
+	if (!tds_dstr_isempty(&login->client_host_name)) {
 		res = tds_dstr_dup(&connection->client_host_name, &login->client_host_name);
 	}
-	if (res && !tds_dstr_isempty(&login->app_name)) {
+	if (!tds_dstr_isempty(&login->app_name)) {
 		res = tds_dstr_dup(&connection->app_name, &login->app_name);
 	}
-	if (res && !tds_dstr_isempty(&login->user_name)) {
+	if (!tds_dstr_isempty(&login->user_name)) {
 		res = tds_dstr_dup(&connection->user_name, &login->user_name);
 	}
-	if (res && !tds_dstr_isempty(&login->password)) {
+	if (!tds_dstr_isempty(&login->password)) {
 		/* for security reason clear memory */
 		tds_dstr_zero(&connection->password);
 		res = tds_dstr_dup(&connection->password, &login->password);
 	}
-	if (res && !tds_dstr_isempty(&login->library)) {
+	if (!tds_dstr_isempty(&login->library)) {
 		res = tds_dstr_dup(&connection->library, &login->library);
 	}
 	if (login->encryption_level) {
@@ -754,25 +736,8 @@ tds_config_login(TDSLOGIN * connection, TDSLOGIN * login)
 	if (!login->check_ssl_hostname)
 		connection->check_ssl_hostname = login->check_ssl_hostname;
 
-	if (res && !tds_dstr_isempty(&login->db_filename)) {
-		res = tds_dstr_dup(&connection->db_filename, &login->db_filename);
-	}
-
 	/* copy other info not present in configuration file */
 	connection->capabilities = login->capabilities;
-
-	if (login->readonly_intent)
-		connection->readonly_intent = login->readonly_intent;
-
-	connection->use_new_password = login->use_new_password;
-
-    if(login->use_ntlmv2_specified) {
-        connection->use_ntlmv2_specified = login->use_ntlmv2_specified;
-        connection->use_ntlmv2 = login->use_ntlmv2;
-    }
-
-	if (res)
-		res = tds_dstr_dup(&connection->new_password, &login->new_password);
 
 	return res != NULL;
 }
@@ -832,7 +797,7 @@ tds_config_env_tdshost(TDSLOGIN * login)
 {
 	const char *tdshost;
 	char tmp[128];
-	struct addrinfo *addrs;
+	struct tds_addrinfo *addrs;
 
 	if (!(tdshost = getenv("TDSHOST")))
 		return 1;
@@ -904,7 +869,6 @@ tds_config_verstr(const char *tdsver, TDSLOGIN * login)
 		, { "7.1", 0x701 }
 		, { "7.2", 0x702 }
 		, { "7.3", 0x703 }
-		, { "7.4", 0x704 }
 		};
 	const struct tdsvername_t *pver;
 
@@ -913,7 +877,7 @@ tds_config_verstr(const char *tdsver, TDSLOGIN * login)
 		return NULL;
 	}
 
-	if ((pver = (const struct tdsvername_t *) TDS_FIND(tdsver, tds_versions, tds_vernanme_cmp)) == NULL) {
+	if ((pver = TDS_FIND(tdsver, tds_versions, tds_vernanme_cmp)) == NULL) {
 		tdsdump_log(TDS_DBG_INFO1, "error: no such version: %s\n", tdsver);
 		return NULL;
 	}
@@ -954,34 +918,33 @@ tds_set_interfaces_file_loc(const char *interf)
  * string.
  */
 /* TODO callers seem to set always connection info... change it */
-struct addrinfo *
+struct tds_addrinfo *
 tds_lookup_host(const char *servername)	/* (I) name of the server                  */
 {
-	struct addrinfo hints, *addr = NULL;
+	struct tds_addrinfo hints, *addr = NULL;
 	assert(servername != NULL);
 
 	memset(&hints, '\0', sizeof(hints));
 	hints.ai_family = AF_UNSPEC;
-	hints.ai_socktype = SOCK_STREAM;
 
 #ifdef AI_ADDRCONFIG
 	hints.ai_flags |= AI_ADDRCONFIG;
 #endif
 
-	if (getaddrinfo(servername, NULL, &hints, &addr))
+	if (tds_getaddrinfo(servername, NULL, &hints, &addr))
 		return NULL;
 	return addr;
 }
 
 TDSRET
-tds_lookup_host_set(const char *servername, struct addrinfo **addr)
+tds_lookup_host_set(const char *servername, struct tds_addrinfo **addr)
 {
-	struct addrinfo *newaddr;
+	struct tds_addrinfo *newaddr;
 	assert(servername != NULL && addr != NULL);
 
 	if ((newaddr = tds_lookup_host(servername)) != NULL) {
 		if (*addr != NULL)
-			freeaddrinfo(*addr);
+			tds_freeaddrinfo(*addr);
 		*addr = newaddr;
 		return TDS_SUCCESS;
 	}
@@ -1051,7 +1014,7 @@ search_interface_file(TDSLOGIN * login, const char *dir, const char *file, const
 	tmp_ver[0] = '\0';
 
 	tdsdump_log(TDS_DBG_INFO1, "Searching interfaces file %s/%s.\n", dir, file);
-	pathname = tds_new(char, strlen(dir) + strlen(file) + 10);
+	pathname = (char *) malloc(strlen(dir) + strlen(file) + 10);
 	if (!pathname)
 		return 0;
 
@@ -1130,7 +1093,7 @@ search_interface_file(TDSLOGIN * login, const char *dir, const char *file, const
 	if (server_found) {
 
 		if (TDS_SUCCEED(tds_lookup_host_set(tmp_ip, &login->ip_addrs))) {
-			struct addrinfo *addrs;
+			struct tds_addrinfo *addrs;
 			if (!tds_dstr_copy(&login->server_host_name, tmp_ip))
 				return 0;
 			for (addrs = login->ip_addrs; addrs != NULL; addrs = addrs->ai_next) {
@@ -1331,9 +1294,7 @@ tds_get_compiletime_settings(void)
 #		else
 			, 0
 #		endif
-#		ifdef TDS42
-			, "4.2"
-#		elif TDS46
+#		ifdef TDS46
 			, "4.6"
 #		elif TDS50
 			, "5.0"
@@ -1345,10 +1306,8 @@ tds_get_compiletime_settings(void)
 			, "7.2"
 #		elif TDS73
 			, "7.3"
-#		elif TDS74
-			, "7.4"
 #		else
-			, "auto"
+			, "4.2"
 #		endif
 #		ifdef IODBC
 			, 1
@@ -1366,11 +1325,6 @@ tds_get_compiletime_settings(void)
 			, 0
 #		endif
 #		ifdef HAVE_GNUTLS
-			, 1
-#		else
-			, 0
-#		endif
-#		if ENABLE_ODBC_MARS
 			, 1
 #		else
 			, 0

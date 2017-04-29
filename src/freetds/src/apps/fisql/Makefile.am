@@ -2,7 +2,8 @@
 
 AM_CPPFLAGS	= -I$(top_srcdir)/include 
 
-if !MINGW32
+if MINGW32
+else
 bin_PROGRAMS	= fisql
 
 fisql_SOURCES	= fisql.c  \
@@ -14,5 +15,5 @@ fisql_SOURCES	= fisql.c  \
 
 fisql_LDADD	= ../../dblib/libsybdb.la \
 		  ../../replacements/libreplacements.la \
-		  $(LTLIBICONV) $(READLINE_LIBS)
+		  $(NETWORK_LIBS) $(LTLIBICONV) $(READLINE_LIBS)
 endif

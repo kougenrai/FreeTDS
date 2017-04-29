@@ -10,6 +10,9 @@
 #include <ctpublic.h>
 #include "common.h"
 
+static char software_version[] = "$Id: get_send_data.c,v 1.6 2011-05-16 08:51:40 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
+
 static CS_CONNECTION *conn = NULL;
 
 /* Testing: Retrieve CS_TEXT_TYPE using ct_bind() */
@@ -146,11 +149,11 @@ main(int argc, char **argv)
 						fprintf(stdout, "id = '%d'\n", id);
 					}
 
-					nameptr = name;
-					while ((ret2 = ct_get_data(cmd, 2 , nameptr, 200, &getlen )) == CS_SUCCEED) {
-						nameptr += getlen;
+                    nameptr = name;
+                    while ((ret2 = ct_get_data(cmd, 2 , nameptr, 200, &getlen )) == CS_SUCCEED) {
+                        nameptr += getlen;
 					}
-					if (ret2 != CS_END_DATA) {
+                    if (ret2 != CS_END_DATA) {
 						fprintf(stderr, "ct_get_data() failed\n");
 						return 1;
 					}
@@ -161,7 +164,7 @@ main(int argc, char **argv)
 					}
 					fprintf(stdout, "%s: Trying ct_data_info on text column\n", __FILE__);
 
-					if (ct_data_info(cmd, CS_GET, 2, &iodesc) != CS_SUCCEED) {
+                    if (ct_data_info(cmd, CS_GET, 2, &iodesc) != CS_SUCCEED) {
 						fprintf(stderr, "ct_data_info() failed\n");
 						return 1;
 					} else {
@@ -206,7 +209,7 @@ main(int argc, char **argv)
 	if ((ret = ct_command(cmd, CS_SEND_DATA_CMD, NULL, CS_UNUSED, CS_COLUMN_DATA)) != CS_SUCCEED) {
 		fprintf(stderr, "ct_command(CS_SEND_DATA_CMD) failed.\n");
 		return 1;
-	}
+	}               
 
 	iodesc.total_txtlen = 800;
 	iodesc.log_on_update = CS_TRUE;

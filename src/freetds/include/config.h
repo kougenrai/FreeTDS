@@ -7,14 +7,6 @@
 /* Define to 1 if you need BSD_COMP defined to get FIONBIO defined. */
 /* #undef BSD_COMP */
 
-/* Define to one of `_getb67', `GETB67', `getb67' for Cray-2 and Cray-YMP
-   systems. This function is required for `alloca.c' support on those systems.
-   */
-/* #undef CRAY_STACKSEG_END */
-
-/* Define to 1 if using `alloca.c'. */
-/* #undef C_ALLOCA */
-
 /* Define to enable work in progress code */
 /* #undef ENABLE_DEVELOPING */
 
@@ -22,7 +14,7 @@
 /* #undef ENABLE_EXTRA_CHECKS */
 
 /* Defined if --enable-krb5 used and library detected */
-//#define ENABLE_KRB5 1
+/* #undef ENABLE_KRB5 */
 
 /* Define to enable MARS support */
 /* #undef ENABLE_ODBC_MARS */
@@ -30,18 +22,8 @@
 /* Define to enable ODBC wide string support */
 #define ENABLE_ODBC_WIDE 1
 
-/* Define to 1 if GNU tls use nettle as backend. */
-/* #undef GNUTLS_USE_NETTLE */
-
 /* Define to 1 if you have the `alarm' function. */
 #define HAVE_ALARM 1
-
-/* Define to 1 if you have `alloca', as a function or macro. */
-#define HAVE_ALLOCA 1
-
-/* Define to 1 if you have <alloca.h> and it should be used (not on Ultrix).
-   */
-#define HAVE_ALLOCA_H 1
 
 /* Define to 1 if you have the <arpa/inet.h> header file. */
 #define HAVE_ARPA_INET_H 1
@@ -53,15 +35,12 @@
 #define HAVE_BASENAME 1
 
 /* Define if you have the clock_gettime function. */
-/* #undef HAVE_CLOCK_GETTIME */
+#define HAVE_CLOCK_GETTIME 1
 
 /* Define to 1 if you have the <com_err.h> header file. */
 #if TARGET_OS_MAC && !TARGET_OS_IPHONE
 #define HAVE_COM_ERR_H 1
 #endif
-
-/* Define to 1 if you have the `daemon' function. */
-#define HAVE_DAEMON 1
 
 /* Define to 1 if you have the declaration of `cygwin_conv_path', and to 0 if
    you don't. */
@@ -90,10 +69,7 @@
 #define HAVE_ERRNO_H 1
 
 /* Define to 1 if you have the `error_message' function. */
-#define HAVE_ERROR_MESSAGE 1
-
-/* Define to 1 if you have the `eventfd' function. */
-/* #undef HAVE_EVENTFD */
+/* #undef HAVE_ERROR_MESSAGE */
 
 /* Define to 1 if you have the `fork' function. */
 #define HAVE_FORK 1
@@ -176,9 +152,6 @@
 /* Define to 1 if you have the `getopt' function. */
 #define HAVE_GETOPT 1
 
-/* Define to 1 if you have the <getopt.h> header file. */
-#define HAVE_GETOPT_H 1
-
 /* Define if your getopt(3) defines and uses optreset */
 #define HAVE_GETOPT_OPTRESET 1
 
@@ -194,26 +167,13 @@
 /* Define to 1 if you have the `getuid' function. */
 #define HAVE_GETUID 1
 
-/* Define if you have GMP library */
-/* #undef HAVE_GMP */
-
-/* Define to 1 if you have GnuTLS. */
+/* Define to 1 if you have GNU tls. */
 /* #undef HAVE_GNUTLS */
-
-/* Define to 1 if you have the <gnutls/abstract.h> header file. */
-/* #undef HAVE_GNUTLS_ABSTRACT_H */
-
-/* Define to 1 if you have the `gnutls_certificate_set_verify_function'
-   function. */
-/* #undef HAVE_GNUTLS_CERTIFICATE_SET_VERIFY_FUNCTION */
 
 /* Define to 1 if you have the `gnutls_record_disable_padding' function. */
 /* #undef HAVE_GNUTLS_RECORD_DISABLE_PADDING */
 
-/* Define to 1 if you have the `gnutls_rnd' function. */
-/* #undef HAVE_GNUTLS_RND */
-
-/* Define if you have the iconv() function and it works. */
+/* Define if you have the iconv() function. */
 #define HAVE_ICONV 1
 
 /* Define to 1 if you have the `inet_ntoa_r' function. */
@@ -276,14 +236,14 @@
 /* Define to 1 if you have the <netinet/tcp.h> header file. */
 #define HAVE_NETINET_TCP_H 1
 
-/* Define to 1 if nettle is present. */
-/* #undef HAVE_NETTLE */
-
 /* Define to 1 if you have the `nl_langinfo' function. */
 #define HAVE_NL_LANGINFO 1
 
+/* Define to 1 if you have the <odbcss.h> header file. */
+/* #undef HAVE_ODBCSS_H */
+
 /* Define if you have the OpenSSL. */
-#define HAVE_OPENSSL 1
+/* #undef HAVE_OPENSSL */
 
 /* Define to 1 if you have the <paths.h> header file. */
 #define HAVE_PATHS_H 1
@@ -303,10 +263,6 @@
 /* Define to 1 if you have the `pthread_cond_timedwait' function. */
 #define HAVE_PTHREAD_COND_TIMEDWAIT 1
 
-/* Define to 1 if you have the `pthread_cond_timedwait_relative_np' function.
-   */
-#define HAVE_PTHREAD_COND_TIMEDWAIT_RELATIVE_NP 1
-
 /* Define to 1 if you have the `putenv' function. */
 #define HAVE_PUTENV 1
 
@@ -318,6 +274,9 @@
 
 /* Define to 1 if you have the `readpassphrase' function. */
 #define HAVE_READPASSPHRASE 1
+
+/* Define to 1 if you have the <readpassphrase.h> header file. */
+#define HAVE_READPASSPHRASE_H 1
 
 /* Define to 1 if you have rl_inhibit_completion. */
 #define HAVE_RL_INHIBIT_COMPLETION 1
@@ -370,9 +329,6 @@
 /* Defined if not --disable-sspi and SSPI detected */
 /* #undef HAVE_SSPI */
 
-/* Define to 1 if you have the <stdbool.h> header file. */
-#define HAVE_STDBOOL_H 1
-
 /* Define to 1 if you have the <stddef.h> header file. */
 #define HAVE_STDDEF_H 1
 
@@ -405,9 +361,6 @@
 
 /* Define to 1 if `__tm_zone' is a member of `struct tm'. */
 /* #undef HAVE_STRUCT_TM___TM_ZONE */
-
-/* Define to 1 if you have the <sys/eventfd.h> header file. */
-/* #undef HAVE_SYS_EVENTFD_H */
 
 /* Define to 1 if you have the <sys/ioctl.h> header file. */
 #define HAVE_SYS_IOCTL_H 1
@@ -468,6 +421,9 @@
 /* Define to 1 if you have the <winsock2.h> header file. */
 /* #undef HAVE_WINSOCK2_H */
 
+/* Define to 1 if you have the `_atoi64' function. */
+/* #undef HAVE__ATOI64 */
+
 /* Define to 1 if you have the `_fseeki64' function. */
 /* #undef HAVE__FSEEKI64 */
 
@@ -476,6 +432,12 @@
 
 /* Define to 1 if you have the `_lock_file' function. */
 /* #undef HAVE__LOCK_FILE */
+
+/* Define to 1 if you have the `_lseeki64' function. */
+/* #undef HAVE__LSEEKI64 */
+
+/* Define to 1 if you have the `_telli64' function. */
+/* #undef HAVE__TELLI64 */
 
 /* Define to 1 if you have the `_unlock_file' function. */
 /* #undef HAVE__UNLOCK_FILE */
@@ -523,7 +485,8 @@
    */
 /* #undef INADDR_NONE */
 
-/* Define to the sub-directory where libtool stores uninstalled libraries. */
+/* Define to the sub-directory in which libtool stores uninstalled libraries.
+   */
 #define LT_OBJDIR ".libs/"
 
 /* Define to 1 if the BSD-style netdb interface is reentrant. */
@@ -542,7 +505,7 @@
 #define PACKAGE_NAME "FreeTDS"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "FreeTDS 1.00.6"
+#define PACKAGE_STRING "FreeTDS 0.95"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "freetds"
@@ -551,7 +514,7 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.00.6"
+#define PACKAGE_VERSION "0.95"
 
 /* Define to necessary symbol if this constant uses a non-standard name on
    your system. */
@@ -593,14 +556,6 @@
 /* The size of `__int64', as computed by sizeof. */
 #define SIZEOF___INT64 0
 
-/* If using the C implementation of alloca, define if you know the
-   direction of stack growth for your system; otherwise it will be
-   automatically deduced at runtime.
-	STACK_DIRECTION > 0 => grows toward higher addresses
-	STACK_DIRECTION < 0 => grows toward lower addresses
-	STACK_DIRECTION = 0 => direction of growth unknown */
-/* #undef STACK_DIRECTION */
-
 /* Define to 1 if you have the ANSI C header files. */
 #define STDC_HEADERS 1
 
@@ -611,7 +566,7 @@
 /* #undef TDS46 */
 
 /* Define to use TDS 5.0 by default */
-/* #undef TDS50 */
+#define TDS50 1
 
 /* Define to use TDS 7.0 by default */
 /* #undef TDS70 */
@@ -623,20 +578,13 @@
 /* #undef TDS72 */
 
 /* Define to use TDS 7.3 by default */
-// NOTE: To autodetect, remove this.
-/*#define TDS73 1*/
-
-/* Define to use TDS 7.4 by default */
-/* #undef TDS74 */
-
-/* Not debugging login */
-#define TDS_DEBUG_LOGIN 0
+/* #undef TDS73 */
 
 /* Define to 1 if your compiler supports __attribute__((destructor)). */
 #define TDS_ATTRIBUTE_DESTRUCTOR 1
 
 /* define to constant to use for clock_gettime */
-/* #undef TDS_GETTIMEMILLI_CONST */
+#define TDS_GETTIMEMILLI_CONST CLOCK_MONOTONIC
 
 /* Define if you have pthread with mutex support */
 #define TDS_HAVE_PTHREAD_MUTEX 1
@@ -688,7 +636,7 @@
 
 
 /* Version number of package */
-#define VERSION "1.00.6"
+#define VERSION "0.95"
 
 /* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
    significant byte first (like Motorola and SPARC, unlike Intel). */
@@ -734,9 +682,6 @@
 #ifndef __cplusplus
 /* #undef inline */
 #endif
-
-/* Define to `unsigned int' if <sys/types.h> does not define. */
-/* #undef size_t */
 
 /* type to use in place of socklen_t if not defined */
 /* #undef socklen_t */

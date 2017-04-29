@@ -42,6 +42,15 @@
 #include <freetds/bytes.h>
 #include "des.h"
 
+TDS_RCSID(var, "$Id: des.c,v 1.16 2011-05-16 08:51:40 freddy77 Exp $");
+
+static void permute_ip(des_cblock inblock, DES_KEY * key, des_cblock outblock);
+static void permute_fp(des_cblock inblock, DES_KEY * key, des_cblock outblock);
+static void perminit_ip(DES_KEY * key);
+static void spinit(DES_KEY * key);
+static void perminit_fp(DES_KEY * key);
+static TDS_UINT f(DES_KEY * key, register TDS_UINT r, register unsigned char *subkey);
+
 void
 tds_des_set_odd_parity(des_cblock key)
 {
@@ -59,15 +68,6 @@ tds_des_set_odd_parity(des_cblock key)
 		key[i] = (key[i] & 0xfe) | (parity & 1);
 	}
 }
-
-#ifndef HAVE_NETTLE
-
-static void permute_ip(des_cblock inblock, DES_KEY * key, des_cblock outblock);
-static void permute_fp(des_cblock inblock, DES_KEY * key, des_cblock outblock);
-static void perminit_ip(DES_KEY * key);
-static void spinit(DES_KEY * key);
-static void perminit_fp(DES_KEY * key);
-static TDS_UINT f(DES_KEY * key, register TDS_UINT r, register unsigned char *subkey);
 
 /* Tables defined in the Data Encryption Standard documents */
 
@@ -615,12 +615,10 @@ spinit(DES_KEY * key)
 	}
 }
 
-#endif
-
 /* ECB MODE */
 
 int
-tds_des_ecb_encrypt(const void *plaintext, int len, DES_KEY * akey, unsigned char *output)
+tds_des_ecb_encrypt(const void *plaintext, int len, DES_KEY * akey, des_cblock output)
 {
 	int j;
 	const unsigned char *plain = (const unsigned char *) plaintext;

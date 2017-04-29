@@ -38,6 +38,8 @@
 #include <freetds/odbc.h>
 #include <freetds/string.h>
 
+TDS_RCSID(var, "$Id: native.c,v 1.31 2011-06-03 21:14:48 freddy77 Exp $");
+
 #define TDS_ISSPACE(c) isspace((unsigned char) (c))
 #define TDS_ISALPHA(c) isalpha((unsigned char) (c))
 
@@ -74,17 +76,16 @@
  * TRUNCATE -> ??
  */
 static SQLRETURN
-to_native(struct _hdbc *dbc, struct _hstmt *stmt, DSTR *str)
+to_native(struct _hdbc *dbc, struct _hstmt *stmt, char *buf)
 {
 	char *d, *s;
 	int nest_syntax = 0;
-	char *buf = tds_dstr_buf(str);
 
 	/* list of bit, used as stack, is call ? FIXME limites size... */
 	unsigned long is_calls = 0;
 	int server_scalar;
 
-	assert(dbc);
+	assert(dbc && buf);
 
 	server_scalar = TDS_IS_MSSQL(dbc->tds_socket) && dbc->tds_socket->conn->product_version >= TDS_MS_VER(7, 0, 0);
 
@@ -116,8 +117,7 @@ to_native(struct _hdbc *dbc, struct _hstmt *stmt, DSTR *str)
 		if (*s == '{') {
 			char *pcall;
 
-			while (TDS_ISSPACE(*++s))
-				continue;
+			while (TDS_ISSPACE(*++s));
 			pcall = s;
 			/* FIXME if nest_syntax > 0 problems */
 			if (server_scalar && strncasecmp(pcall, "fn ", 3) == 0) {
@@ -126,11 +126,9 @@ to_native(struct _hdbc *dbc, struct _hstmt *stmt, DSTR *str)
 			}
 			if (*pcall == '?') {
 				/* skip spaces after ? */
-				while (TDS_ISSPACE(*++pcall))
-					continue;
+				while (TDS_ISSPACE(*++pcall));
 				if (*pcall == '=') {
-					while (TDS_ISSPACE(*++pcall))
-						continue;
+					while (TDS_ISSPACE(*++pcall));
 				} else {
 					/* avoid {?call ... syntax */
 					pcall = s;
@@ -175,7 +173,7 @@ to_native(struct _hdbc *dbc, struct _hstmt *stmt, DSTR *str)
 			*d++ = *s++;
 		}
 	}
-	tds_dstr_setlen(str, d - buf);
+	*d = '\0';
 	return SQL_SUCCESS;
 }
 
@@ -229,7 +227,11 @@ prepare_call(struct _hstmt * stmt)
 	SQLRETURN rc;
 	TDS_SERVER_TYPE type;
 
-	if (tds_dstr_isempty(&stmt->query))
+	if (stmt->prepared_query)
+		buf = stmt->prepared_query;
+	else if (stmt->query)
+		buf = stmt->query;
+	else
 		return SQL_ERROR;
 
 	if ((!tds_dstr_isempty(&stmt->attr.qn_msgtext) || !tds_dstr_isempty(&stmt->attr.qn_options)) && !IS_TDS72_PLUS(stmt->dbc->tds_socket->conn)) {
@@ -237,7 +239,7 @@ prepare_call(struct _hstmt * stmt)
 		return SQL_SUCCESS_WITH_INFO;
 	}
 
-	if ((rc = to_native(stmt->dbc, stmt, &stmt->query)) != SQL_SUCCESS)
+	if ((rc = to_native(stmt->dbc, stmt, buf)) != SQL_SUCCESS)
 		return rc;
 
 	/* now detect RPC */
@@ -245,7 +247,7 @@ prepare_call(struct _hstmt * stmt)
 		return SQL_SUCCESS;
 	stmt->prepared_query_is_rpc = 0;
 
-	s = buf = tds_dstr_buf(&stmt->query);
+	s = buf;
 	while (TDS_ISSPACE(*s))
 		++s;
 	if (strncasecmp(s, "exec", 4) == 0) {
@@ -272,8 +274,7 @@ prepare_call(struct _hstmt * stmt)
 	param_start = s;
 	--s;			/* trick, now s point to no blank */
 	for (;;) {
-		while (TDS_ISSPACE(*++s))
-			continue;
+		while (TDS_ISSPACE(*++s));
 		if (!*s)
 			break;
 		switch (*s) {
@@ -290,8 +291,7 @@ prepare_call(struct _hstmt * stmt)
 			--s;
 			break;
 		}
-		while (TDS_ISSPACE(*++s))
-			continue;
+		while (TDS_ISSPACE(*++s));
 		if (!*s)
 			break;
 		if (*s != ',') {
@@ -302,9 +302,7 @@ prepare_call(struct _hstmt * stmt)
 	stmt->prepared_query_is_rpc = 1;
 
 	/* remove unneeded exec */
-	s += strlen(s);
-	memmove(buf, p, s - p);
-	tds_dstr_setlen(&stmt->query, s - p);
+	memmove(buf, p, strlen(p) + 1);
 	stmt->prepared_pos = buf + (param_start - p);
 
 	return SQL_SUCCESS;
@@ -312,7 +310,7 @@ prepare_call(struct _hstmt * stmt)
 
 /* TODO handle output parameter and not terminated string */
 SQLRETURN
-native_sql(struct _hdbc * dbc, DSTR *s)
+native_sql(struct _hdbc * dbc, char *s)
 {
 	return to_native(dbc, NULL, s);
 }

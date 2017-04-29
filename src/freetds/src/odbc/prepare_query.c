@@ -37,6 +37,8 @@
 #include <freetds/odbc.h>
 #include <freetds/convert.h>
 
+TDS_RCSID(var, "$Id: prepare_query.c,v 1.81 2011-06-05 09:21:49 freddy77 Exp $");
+
 #define TDS_ISSPACE(c) isspace((unsigned char) (c))
 
 static int
@@ -52,8 +54,7 @@ prepared_rpc(struct _hstmt *stmt, int compute_row)
 		TDS_SERVER_TYPE type;
 		const char *start;
 
-		while (TDS_ISSPACE(*++p))
-			continue;
+		while (TDS_ISSPACE(*++p));
 		if (!*p)
 			return SQL_SUCCESS;
 
@@ -177,8 +178,7 @@ prepared_rpc(struct _hstmt *stmt, int compute_row)
 		}
 		++nparam;
 
-		while (TDS_ISSPACE(*++p))
-			continue;
+		while (TDS_ISSPACE(*++p));
 		if (!*p || *p != ',')
 			return SQL_SUCCESS;
 		stmt->prepared_pos = (char *) p + 1;
@@ -392,7 +392,7 @@ continue_parse_prepared_query(struct _hstmt *stmt, SQLPOINTER DataPtr, SQLLEN St
 			return SQL_SUCCESS;
 
 		assert(blob->textvalue || curcol->column_cur_size == 0);
-		p = (TDS_CHAR *) TDS_RESIZE(blob->textvalue, len + curcol->column_cur_size);
+		p = TDS_RESIZE(blob->textvalue, len + curcol->column_cur_size);
 		if (!p) {
 			odbc_errs_add(&stmt->errs, "HY001", NULL); /* Memory allocation error */
 			return SQL_ERROR;

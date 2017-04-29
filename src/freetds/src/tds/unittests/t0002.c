@@ -19,7 +19,6 @@
 #include "common.h"
 
 #include <freetds/string.h>
-#include <replacements.h>
 
 static char *
 value_as_string(TDSSOCKET * tds, int col_idx)
@@ -30,7 +29,8 @@ value_as_string(TDSSOCKET * tds, int col_idx)
 
 	switch (type) {
 	case SYBVARCHAR:
-		strlcpy(result, (const char *) value, sizeof(result));
+		strncpy(result, (const char *) value, sizeof(result) - 1);
+		result[sizeof(result) - 1] = '\0';
 		break;
 	case SYBINT4:
 		sprintf(result, "%d", *(const int *) value);

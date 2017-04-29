@@ -26,18 +26,19 @@
  * prepare or execute a query. This should fail and return an error message.
  */
 
+static char software_version[] = "$Id: prepclose.c,v 1.8 2011-07-12 10:16:59 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
+
 #if HAVE_FSTAT && defined(S_IFSOCK)
 
 static int
 close_last_socket(void)
 {
-	TDS_SYS_SOCKET max_socket = odbc_find_last_socket();
-	TDS_SYS_SOCKET sockets[2];
+	int max_socket = odbc_find_last_socket();
+	int sockets[2];
 
-	if (max_socket < 0) {
-		fprintf(stderr, "Error finding last socket\n");
+	if (max_socket < 0)
 		return 0;
-	}
 
 	/* replace socket with a new one */
 	if (socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) < 0)
@@ -59,7 +60,6 @@ Test(int direct)
 	SQLTCHAR buf[256];
 	SQLTCHAR sqlstate[6];
 
-	odbc_mark_sockets_opened();
 	odbc_connect();
 
 	if (!close_last_socket()) {
@@ -100,7 +100,6 @@ int
 main(void)
 {
 	printf("Not possible for this platform.\n");
-	odbc_test_skipped();
 	return 0;
 }
 #endif

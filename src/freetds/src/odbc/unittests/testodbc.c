@@ -10,6 +10,9 @@
 
 #include "common.h"
 
+static char software_version[] = "$Id: testodbc.c,v 1.16 2011-07-12 10:16:59 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
+
 #ifdef DEBUG
 # define AB_FUNCT(x)  do { printf x; printf("\n"); } while(0)
 # define AB_PRINT(x)  do { printf x; printf("\n"); } while(0)
@@ -69,8 +72,7 @@ TestRawODBCPreparedQuery(void)
 		"INSERT INTO #Products(ProductID,ProductName,SupplierID,CategoryID,QuantityPerUnit,UnitPrice,UnitsInStock,UnitsOnOrder,ReorderLevel,Discontinued) VALUES(74,'Longlife Tofu',4,7,'5 kg pkg.',10.00,4,20,5,0) "
 		"INSERT INTO #Products(ProductID,ProductName,SupplierID,CategoryID,QuantityPerUnit,UnitPrice,UnitsInStock,UnitsOnOrder,ReorderLevel,Discontinued) VALUES(11,'Queso Cabrales',5,4,'1 kg pkg.',21.00,22,30,30,0) "
 		"INSERT INTO #Products(ProductID,ProductName,SupplierID,CategoryID,QuantityPerUnit,UnitPrice,UnitsInStock,UnitsOnOrder,ReorderLevel,Discontinued) VALUES(12,'Queso Manchego La Pastora',5,4,'10 - 500 g pkgs.',38.00,86,0,0,0)");
-	while (SQLMoreResults(odbc_stmt) == SQL_SUCCESS)
-		continue;
+	while (SQLMoreResults(odbc_stmt) == SQL_SUCCESS);
 
 	queryString = T("SELECT * FROM #Products WHERE SupplierID = ?");
 
@@ -140,8 +142,7 @@ TestRawODBCDirectQuery(void)
 		"INSERT INTO #Products(ProductID,ProductName,SupplierID,CategoryID,QuantityPerUnit,UnitPrice,UnitsInStock,UnitsOnOrder,ReorderLevel,Discontinued) VALUES(3,'Aniseed Syrup',1,2,'12 - 550 ml bottles',10.00,13,70,25,0) "
 		"INSERT INTO #Products(ProductID,ProductName,SupplierID,CategoryID,QuantityPerUnit,UnitPrice,UnitsInStock,UnitsOnOrder,ReorderLevel,Discontinued) VALUES(4,'Chef Anton''s Cajun Seasoning',2,2,'48 - 6 oz jars',22.00,53,0,0,0) "
 		"INSERT INTO #Products(ProductID,ProductName,SupplierID,CategoryID,QuantityPerUnit,UnitPrice,UnitsInStock,UnitsOnOrder,ReorderLevel,Discontinued) VALUES(5,'Chef Anton''s Gumbo Mix',2,2,'36 boxes',21.35,0,0,0,1) ");
-	while (SQLMoreResults(odbc_stmt) == SQL_SUCCESS)
-		continue;
+	while (SQLMoreResults(odbc_stmt) == SQL_SUCCESS);
 
 	CHKBindParameter(1, SQL_PARAM_INPUT, SQL_C_SSHORT, SQL_INTEGER, 0, 0, &supplierId, 0, &lenOrInd, "S");
 

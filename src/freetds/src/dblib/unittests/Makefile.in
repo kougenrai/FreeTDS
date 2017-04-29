@@ -102,10 +102,11 @@ am__aclocal_m4_deps =  \
 	$(top_srcdir)/m4/acx_pthread.m4 \
 	$(top_srcdir)/m4/ax_cflags_gcc_option.m4 \
 	$(top_srcdir)/m4/check_openssl.m4 \
-	$(top_srcdir)/m4/gettimemilli.m4 $(top_srcdir)/m4/libtool.m4 \
+	$(top_srcdir)/m4/gettimemilli.m4 $(top_srcdir)/m4/iconv.m4 \
+	$(top_srcdir)/m4/lib-ld.m4 $(top_srcdir)/m4/lib-link.m4 \
+	$(top_srcdir)/m4/lib-prefix.m4 $(top_srcdir)/m4/libtool.m4 \
 	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
 	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
-	$(top_srcdir)/m4/pushlibs.m4 \
 	$(top_srcdir)/m4/sprintf_i64_format.m4 \
 	$(top_srcdir)/m4/type_socklen_t.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
@@ -122,9 +123,6 @@ AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
-am_cancel_OBJECTS = cancel.$(OBJEXT) common.$(OBJEXT)
-cancel_OBJECTS = $(am_cancel_OBJECTS)
-cancel_LDADD = $(LDADD)
 am_dbmorecmds_OBJECTS = dbmorecmds.$(OBJEXT) common.$(OBJEXT)
 dbmorecmds_OBJECTS = $(am_dbmorecmds_OBJECTS)
 dbmorecmds_LDADD = $(LDADD)
@@ -152,9 +150,6 @@ rpc_LDADD = $(LDADD)
 am_setnull_OBJECTS = setnull.$(OBJEXT) common.$(OBJEXT)
 setnull_OBJECTS = $(am_setnull_OBJECTS)
 setnull_LDADD = $(LDADD)
-am_spid_OBJECTS = spid.$(OBJEXT) common.$(OBJEXT)
-spid_OBJECTS = $(am_spid_OBJECTS)
-spid_LDADD = $(LDADD)
 am_t0001_OBJECTS = t0001.$(OBJEXT) common.$(OBJEXT)
 t0001_OBJECTS = $(am_t0001_OBJECTS)
 t0001_LDADD = $(LDADD)
@@ -265,32 +260,30 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(bcp_SOURCES) $(cancel_SOURCES) $(dbmorecmds_SOURCES) \
+SOURCES = $(bcp_SOURCES) $(dbmorecmds_SOURCES) \
 	$(done_handling_SOURCES) $(hang_SOURCES) $(null_SOURCES) \
 	$(null2_SOURCES) $(numeric_SOURCES) $(pending_SOURCES) \
-	$(rpc_SOURCES) $(setnull_SOURCES) $(spid_SOURCES) \
-	$(t0001_SOURCES) $(t0002_SOURCES) $(t0003_SOURCES) \
-	$(t0004_SOURCES) $(t0005_SOURCES) $(t0006_SOURCES) \
-	$(t0007_SOURCES) $(t0008_SOURCES) $(t0009_SOURCES) \
-	$(t0011_SOURCES) $(t0012_SOURCES) $(t0013_SOURCES) \
-	$(t0014_SOURCES) $(t0015_SOURCES) $(t0016_SOURCES) \
-	$(t0017_SOURCES) $(t0018_SOURCES) $(t0019_SOURCES) \
-	$(t0020_SOURCES) $(t0021_SOURCES) $(t0022_SOURCES) \
-	$(t0023_SOURCES) $(text_buffer_SOURCES) $(thread_SOURCES) \
-	$(timeout_SOURCES)
-DIST_SOURCES = $(bcp_SOURCES) $(cancel_SOURCES) $(dbmorecmds_SOURCES) \
+	$(rpc_SOURCES) $(setnull_SOURCES) $(t0001_SOURCES) \
+	$(t0002_SOURCES) $(t0003_SOURCES) $(t0004_SOURCES) \
+	$(t0005_SOURCES) $(t0006_SOURCES) $(t0007_SOURCES) \
+	$(t0008_SOURCES) $(t0009_SOURCES) $(t0011_SOURCES) \
+	$(t0012_SOURCES) $(t0013_SOURCES) $(t0014_SOURCES) \
+	$(t0015_SOURCES) $(t0016_SOURCES) $(t0017_SOURCES) \
+	$(t0018_SOURCES) $(t0019_SOURCES) $(t0020_SOURCES) \
+	$(t0021_SOURCES) $(t0022_SOURCES) $(t0023_SOURCES) \
+	$(text_buffer_SOURCES) $(thread_SOURCES) $(timeout_SOURCES)
+DIST_SOURCES = $(bcp_SOURCES) $(dbmorecmds_SOURCES) \
 	$(done_handling_SOURCES) $(hang_SOURCES) $(null_SOURCES) \
 	$(null2_SOURCES) $(numeric_SOURCES) $(pending_SOURCES) \
-	$(rpc_SOURCES) $(setnull_SOURCES) $(spid_SOURCES) \
-	$(t0001_SOURCES) $(t0002_SOURCES) $(t0003_SOURCES) \
-	$(t0004_SOURCES) $(t0005_SOURCES) $(t0006_SOURCES) \
-	$(t0007_SOURCES) $(t0008_SOURCES) $(t0009_SOURCES) \
-	$(t0011_SOURCES) $(t0012_SOURCES) $(t0013_SOURCES) \
-	$(t0014_SOURCES) $(t0015_SOURCES) $(t0016_SOURCES) \
-	$(t0017_SOURCES) $(t0018_SOURCES) $(t0019_SOURCES) \
-	$(t0020_SOURCES) $(t0021_SOURCES) $(t0022_SOURCES) \
-	$(t0023_SOURCES) $(text_buffer_SOURCES) $(thread_SOURCES) \
-	$(timeout_SOURCES)
+	$(rpc_SOURCES) $(setnull_SOURCES) $(t0001_SOURCES) \
+	$(t0002_SOURCES) $(t0003_SOURCES) $(t0004_SOURCES) \
+	$(t0005_SOURCES) $(t0006_SOURCES) $(t0007_SOURCES) \
+	$(t0008_SOURCES) $(t0009_SOURCES) $(t0011_SOURCES) \
+	$(t0012_SOURCES) $(t0013_SOURCES) $(t0014_SOURCES) \
+	$(t0015_SOURCES) $(t0016_SOURCES) $(t0017_SOURCES) \
+	$(t0018_SOURCES) $(t0019_SOURCES) $(t0020_SOURCES) \
+	$(t0021_SOURCES) $(t0022_SOURCES) $(t0023_SOURCES) \
+	$(text_buffer_SOURCES) $(thread_SOURCES) $(timeout_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -523,7 +516,6 @@ am__DIST_COMMON = $(srcdir)/Makefile.in $(top_srcdir)/depcomp \
 	$(top_srcdir)/mkinstalldirs $(top_srcdir)/test-driver README
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
-ALLOCA = @ALLOCA@
 AMTAR = @AMTAR@
 AM_CFLAGS = @AM_CFLAGS@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
@@ -555,10 +547,6 @@ FGREP = @FGREP@
 FREETDS_LIBGCC = @FREETDS_LIBGCC@
 FREETDS_ODBC_MODULE = @FREETDS_ODBC_MODULE@
 FREETDS_SYMBOLIC = @FREETDS_SYMBOLIC@
-GCRYPT_CFLAGS = @GCRYPT_CFLAGS@
-GCRYPT_LIBS = @GCRYPT_LIBS@
-GNUTLS_CFLAGS = @GNUTLS_CFLAGS@
-GNUTLS_LIBS = @GNUTLS_LIBS@
 GREP = @GREP@
 HAVE_OPENSSL = @HAVE_OPENSSL@
 HAVE_PERL_SOURCES = @HAVE_PERL_SOURCES@
@@ -575,7 +563,7 @@ LIBADD_DLOPEN = @LIBADD_DLOPEN@
 LIBADD_SHL_LOAD = @LIBADD_SHL_LOAD@
 LIBICONV = @LIBICONV@
 LIBOBJS = @LIBOBJS@
-LIBS = ../libsybdb.la ../../replacements/libreplacements.la $(LTLIBICONV)
+LIBS = ../libsybdb.la ../../replacements/libreplacements.la $(LTLIBICONV) @NETWORK_LIBS@
 LIBTOOL = @LIBTOOL@
 LIPO = @LIPO@
 LN_S = @LN_S@
@@ -583,14 +571,11 @@ LTLIBICONV = @LTLIBICONV@
 LTLIBOBJS = @LTLIBOBJS@
 LT_DLLOADERS = @LT_DLLOADERS@
 LT_DLPREOPEN = @LT_DLPREOPEN@
-LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAJOR = @MAJOR@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MINOR = @MINOR@
 MKDIR_P = @MKDIR_P@
-NETTLE_CFLAGS = @NETTLE_CFLAGS@
-NETTLE_LIBS = @NETTLE_LIBS@
 NETWORK_LIBS = @NETWORK_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -603,8 +588,6 @@ ODBCNODMLIB = @ODBCNODMLIB@
 ODBCNODMLIBAPP = @ODBCNODMLIBAPP@
 ODBC_CONFIG = @ODBC_CONFIG@
 ODBC_INC = @ODBC_INC@
-OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
-OPENSSL_LIBS = @OPENSSL_LIBS@
 OTOOL = @OTOOL@
 OTOOL64 = @OTOOL64@
 PACKAGE = @PACKAGE@
@@ -616,8 +599,6 @@ PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 PKG_CONFIG = @PKG_CONFIG@
-PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
-PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
@@ -690,6 +671,8 @@ tds_sysdep_real64_type = @tds_sysdep_real64_type@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
+
+# $Id: Makefile.am,v 1.51 2011-06-08 09:25:53 freddy77 Exp $
 TESTS = t0001$(EXEEXT) t0002$(EXEEXT) t0003$(EXEEXT)\
 			t0004$(EXEEXT) t0005$(EXEEXT) t0006$(EXEEXT)\
 			t0007$(EXEEXT) t0008$(EXEEXT) t0009$(EXEEXT)\
@@ -701,16 +684,14 @@ TESTS = t0001$(EXEEXT) t0002$(EXEEXT) t0003$(EXEEXT)\
 			bcp$(EXEEXT) thread$(EXEEXT) text_buffer$(EXEEXT)\
 			done_handling$(EXEEXT) timeout$(EXEEXT) \
 			hang$(EXEEXT) null$(EXEEXT) null2$(EXEEXT) \
-			setnull$(EXEEXT) numeric$(EXEEXT) pending$(EXEEXT) \
-			cancel$(EXEEXT) spid$(EXEEXT)
+			setnull$(EXEEXT) numeric$(EXEEXT) pending$(EXEEXT)
 
 check_PROGRAMS = $(TESTS)
-SQL_DIST = bcp.sql dbmorecmds.sql done_handling.sql rpc.sql spid.sql \
+SQL_DIST = bcp.sql dbmorecmds.sql done_handling.sql rpc.sql \
 		t0001.sql t0002.sql t0003.sql t0004.sql t0005.sql t0006.sql t0007.sql t0009.sql \
 		t0011.sql t0012.sql t0013.sql t0014.sql t0015.sql t0016.sql t0017.sql t0018.sql \
 		t0020.sql t0022.sql t0023.sql text_buffer.sql timeout.sql numeric.sql numeric_2.sql \
-		pending.sql cancel.sql t0016_10.sql t0016_11.sql t0016_1.sql t0016_2.sql \
-		t0016_3.sql t0016_4.sql t0016_5.sql t0016_6.sql t0016_7.sql t0016_8.sql t0016_9.sql
+		pending.sql
 
 noinst_SCRIPTS = $(SQL_DIST)
 t0001_SOURCES = t0001.c common.c common.h t0001.sql
@@ -748,16 +729,10 @@ null2_SOURCES = null2.c common.c common.h
 setnull_SOURCES = setnull.c common.c common.h
 numeric_SOURCES = numeric.c common.c common.h
 pending_SOURCES = pending.c common.c common.h
-cancel_SOURCES = cancel.c common.c common.h
-spid_SOURCES = spid.c common.c common.h
 AM_CPPFLAGS = -DFREETDS_TOPDIR=\"$(top_srcdir)\" -I$(top_srcdir)/include
 @MINGW32_FALSE@AM_LDFLAGS = -no-install -L../.libs -R $(abs_builddir)/../.libs
 @MINGW32_TRUE@AM_LDFLAGS = -no-fast-install
-EXTRA_DIST = t0016.in t0017.in t0017.in.be data.bin CMakeLists.txt $(SQL_DIST) \
-			t0016_1.in t0016_2.in t0016_3.in t0016_4.in t0016_5.in \
-			t0016_6.in t0016_7.in t0016_8.in t0016_9.in t0016_10.in \
-			t0016_11.in
-
+EXTRA_DIST = t0016.in t0017.in t0017.in.be data.bin CMakeLists.txt $(SQL_DIST)
 CLEANFILES = tdsdump.out t0013.out t0014.out t0016.out \
 				t0016.err t0017.err t0017.out
 
@@ -808,10 +783,6 @@ bcp$(EXEEXT): $(bcp_OBJECTS) $(bcp_DEPENDENCIES) $(EXTRA_bcp_DEPENDENCIES)
 	@rm -f bcp$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(bcp_OBJECTS) $(bcp_LDADD) $(LIBS)
 
-cancel$(EXEEXT): $(cancel_OBJECTS) $(cancel_DEPENDENCIES) $(EXTRA_cancel_DEPENDENCIES) 
-	@rm -f cancel$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(cancel_OBJECTS) $(cancel_LDADD) $(LIBS)
-
 dbmorecmds$(EXEEXT): $(dbmorecmds_OBJECTS) $(dbmorecmds_DEPENDENCIES) $(EXTRA_dbmorecmds_DEPENDENCIES) 
 	@rm -f dbmorecmds$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(dbmorecmds_OBJECTS) $(dbmorecmds_LDADD) $(LIBS)
@@ -847,10 +818,6 @@ rpc$(EXEEXT): $(rpc_OBJECTS) $(rpc_DEPENDENCIES) $(EXTRA_rpc_DEPENDENCIES)
 setnull$(EXEEXT): $(setnull_OBJECTS) $(setnull_DEPENDENCIES) $(EXTRA_setnull_DEPENDENCIES) 
 	@rm -f setnull$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(setnull_OBJECTS) $(setnull_LDADD) $(LIBS)
-
-spid$(EXEEXT): $(spid_OBJECTS) $(spid_DEPENDENCIES) $(EXTRA_spid_DEPENDENCIES) 
-	@rm -f spid$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(spid_OBJECTS) $(spid_LDADD) $(LIBS)
 
 t0001$(EXEEXT): $(t0001_OBJECTS) $(t0001_DEPENDENCIES) $(EXTRA_t0001_DEPENDENCIES) 
 	@rm -f t0001$(EXEEXT)
@@ -959,7 +926,6 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bcp.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cancel.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/common.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbmorecmds.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/done_handling.Po@am__quote@
@@ -970,7 +936,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pending.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rpc.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/setnull.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/spid.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/t0001.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/t0002.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/t0003.Po@am__quote@
@@ -998,25 +963,22 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/timeout.Po@am__quote@
 
 .c.o:
-@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
-@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
-@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c -o $@ $<
 
 .c.obj:
-@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.obj$$||'`;\
-@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ `$(CYGPATH_W) '$<'` &&\
-@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
 
 .c.lo:
-@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.lo$$||'`;\
-@am__fastdepCC_TRUE@	$(LTCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
-@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Plo
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LTCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Plo
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
@@ -1461,20 +1423,6 @@ numeric.log: numeric$(EXEEXT)
 pending.log: pending$(EXEEXT)
 	@p='pending$(EXEEXT)'; \
 	b='pending'; \
-	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
-	--log-file $$b.log --trs-file $$b.trs \
-	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
-	"$$tst" $(AM_TESTS_FD_REDIRECT)
-cancel.log: cancel$(EXEEXT)
-	@p='cancel$(EXEEXT)'; \
-	b='cancel'; \
-	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
-	--log-file $$b.log --trs-file $$b.trs \
-	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
-	"$$tst" $(AM_TESTS_FD_REDIRECT)
-spid.log: spid$(EXEEXT)
-	@p='spid$(EXEEXT)'; \
-	b='spid'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \

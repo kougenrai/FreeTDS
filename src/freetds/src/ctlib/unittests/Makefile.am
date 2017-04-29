@@ -8,8 +8,7 @@ TESTS		=	t0001$(EXEEXT) t0002$(EXEEXT) t0003$(EXEEXT) t0004$(EXEEXT) \
 			ct_diagclient$(EXEEXT) ct_diagserver$(EXEEXT) ct_diagall$(EXEEXT) \
 			cs_config$(EXEEXT) cancel$(EXEEXT) blk_in$(EXEEXT) \
 			blk_out$(EXEEXT) ct_cursor$(EXEEXT) ct_cursors$(EXEEXT) \
-			ct_dynamic$(EXEEXT) blk_in2$(EXEEXT) datafmt$(EXEEXT) \
-			rpc_fail$(EXEEXT) row_count$(EXEEXT)
+			ct_dynamic$(EXEEXT) blk_in2$(EXEEXT) datafmt$(EXEEXT)
 
 check_PROGRAMS	=	$(TESTS)
 
@@ -42,8 +41,6 @@ ct_cursors_SOURCES	= ct_cursors.c common.c common.h
 ct_dynamic_SOURCES	= ct_dynamic.c common.c common.h
 blk_in2_SOURCES		= blk_in2.c common.c common.h
 datafmt_SOURCES		= datafmt.c common.c common.h
-rpc_fail_SOURCES	= rpc_fail.c common.c common.h
-row_count_SOURCES	= row_count.c common.c common.h
 
 AM_CPPFLAGS	=	-I$(top_srcdir)/include
 if MINGW32
@@ -51,6 +48,6 @@ AM_LDFLAGS	=	-no-fast-install
 else
 AM_LDFLAGS	=	-no-install -L../.libs -R $(abs_builddir)/../.libs
 endif
-LIBS		=	../libct.la ../../replacements/libreplacements.la $(LTLIBICONV)
+LIBS		=	../libct.la ../../replacements/libreplacements.la $(LTLIBICONV) @NETWORK_LIBS@
 CLEANFILES	=	tdsdump.out
 EXTRA_DIST	=	CMakeLists.txt

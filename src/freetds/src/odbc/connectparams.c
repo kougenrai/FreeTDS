@@ -31,6 +31,8 @@
 #include <freetds/string.h>
 #include "replacements.h"
 
+TDS_RCSID(var, "$Id: connectparams.c,v 1.94 2011-09-25 11:36:24 freddy77 Exp $");
+
 #define ODBC_PARAM(p) static const char odbc_param_##p[] = #p;
 ODBC_PARAM_LIST
 #undef ODBC_PARAM
@@ -172,10 +174,7 @@ odbc_get_dsn_info(TDS_ERRS *errs, const char *DSN, TDSLOGIN * login)
 			address_specified = 1;
 			/* TODO parse like MS */
 
-			if (TDS_FAILED(tds_lookup_host_set(tmp, &login->ip_addrs))) {
-				odbc_errs_add(errs, "HY000", "Error parsing ADDRESS attribute");
-				return 0;
-			}
+			tds_lookup_host_set(tmp, &login->ip_addrs);
 		}
 		if (myGetPrivateProfileString(DSN, odbc_param_Server, tmp) > 0) {
 			if (!tds_dstr_copy(&login->server_name, tmp)) {
@@ -244,9 +243,6 @@ odbc_get_dsn_info(TDS_ERRS *errs, const char *DSN, TDSLOGIN * login)
 		login->mars = 1;
 	}
 
-	if (myGetPrivateProfileString(DSN, odbc_param_AttachDbFilename, tmp) > 0)
-		tds_parse_conf_section(TDS_STR_DBFILENAME, tmp, login);
-
 	return 1;
 }
 
@@ -273,7 +269,7 @@ odbc_parse_connect_string(TDS_ERRS *errs, const char *connect_string, const char
 			  TDS_PARSED_PARAM *parsed_params)
 {
 	const char *p, *end;
-	DSTR *dest_s, value = DSTR_INITIALIZER;
+	DSTR *dest_s, value;
 	enum { CFG_DSN = 1, CFG_SERVER = 2, CFG_SERVERNAME = 4 };
 	unsigned int cfgs = 0;	/* flags for indicate second parse of string */
 	char option[24];
@@ -282,6 +278,7 @@ odbc_parse_connect_string(TDS_ERRS *errs, const char *connect_string, const char
 	if (parsed_params)
 		memset(parsed_params, 0, sizeof(*parsed_params)*ODBC_PARAM_SIZE);
 
+	tds_dstr_init(&value);
 	for (p = connect_string; p < connect_string_end && *p;) {
 		int num_param = -1;
 
@@ -418,22 +415,6 @@ odbc_parse_connect_string(TDS_ERRS *errs, const char *connect_string, const char
 		} else if (CHK_PARAM(MARS_Connection)) {
 			if (tds_config_boolean(option, tds_dstr_cstr(&value), login))
 				login->mars = 1;
-		} else if (CHK_PARAM(AttachDbFilename)) {
-			dest_s = &login->db_filename;
-		} else if (CHK_PARAM(ApplicationIntent)) {
-			const char *readonly_intent;
-
-			if (strcasecmp(tds_dstr_cstr(&value), "ReadOnly") == 0) {
-				readonly_intent = "yes";
-			} else if (strcasecmp(tds_dstr_cstr(&value), "ReadWrite") == 0) {
-				readonly_intent = "no";
-			} else {
-				tdsdump_log(TDS_DBG_ERROR, "Invalid ApplicationIntent %s\n", tds_dstr_cstr(&value));
-				return 0;
-			}
-
-			tds_parse_conf_section(TDS_STR_READONLY_INTENT, readonly_intent, login);
-			tdsdump_log(TDS_DBG_INFO1, "Application Intent %s\n", readonly_intent);
 		}
 
 		if (num_param >= 0 && parsed_params) {
@@ -484,7 +465,7 @@ odbc_build_connect_string(TDS_ERRS *errs, TDS_PARSED_PARAM *params, char **out)
 	}
 
 	/* allocate */
-	p = tds_new(char, len);
+	p = (char*) malloc(len);
 	if (!p) {
 		odbc_errs_add(errs, "HY001", NULL);
 		return 0;
@@ -523,7 +504,7 @@ tdoParseProfile(const char *option, const char *value, void *param)
 	ProfileParam *p = (ProfileParam *) param;
 
 	if (strcasecmp(p->entry, option) == 0) {
-		strlcpy(p->buffer, value, p->buffer_len);
+		tds_strlcpy(p->buffer, value, p->buffer_len);
 
 		p->ret_val = strlen(p->buffer);
 		p->found = 1;
@@ -575,7 +556,7 @@ SQLGetPrivateProfileString(LPCSTR pszSection, LPCSTR pszEntry, LPCSTR pszDefault
 	tds_read_conf_section(hFile, pszSection, tdoParseProfile, &param);
 
 	if (pszDefault && !param.found) {
-		strlcpy(pRetBuffer, pszDefault, nRetBuffer);
+		tds_strlcpy(pRetBuffer, pszDefault, nRetBuffer);
 
 		param.ret_val = strlen(pRetBuffer);
 	}
@@ -671,7 +652,6 @@ static const char *const aTDSver[] = {
 	"7.1",
 	"7.2",
 	"7.3",
-	"7.4",
 	NULL
 };
 
@@ -715,8 +695,8 @@ definePropertyString(HODBCINSTPROPERTY hLastProperty, const char *name, const ch
 {
 	hLastProperty = addProperty(hLastProperty);
 	hLastProperty->nPromptType = ODBCINST_PROMPTTYPE_TEXTEDIT;
-	strlcpy(hLastProperty->szName, name, INI_MAX_PROPERTY_NAME);
-	strlcpy(hLastProperty->szValue, value, INI_MAX_PROPERTY_VALUE);
+	tds_strlcpy(hLastProperty->szName, name, INI_MAX_PROPERTY_NAME);
+	tds_strlcpy(hLastProperty->szValue, value, INI_MAX_PROPERTY_VALUE);
 	hLastProperty->pszHelp = (char *) strdup(comment);
 	return hLastProperty;
 }
@@ -728,8 +708,8 @@ definePropertyBoolean(HODBCINSTPROPERTY hLastProperty, const char *name, const c
 	hLastProperty->nPromptType = ODBCINST_PROMPTTYPE_LISTBOX;
 	hLastProperty->aPromptData = malloc(sizeof(aBoolean));
 	memcpy(hLastProperty->aPromptData, aBoolean, sizeof(aBoolean));
-	strlcpy(hLastProperty->szName, name, INI_MAX_PROPERTY_NAME);
-	strlcpy(hLastProperty->szValue, value, INI_MAX_PROPERTY_VALUE);
+	tds_strlcpy(hLastProperty->szName, name, INI_MAX_PROPERTY_NAME);
+	tds_strlcpy(hLastProperty->szValue, value, INI_MAX_PROPERTY_VALUE);
 	hLastProperty->pszHelp = (char *) strdup(comment);
 	return hLastProperty;
 }
@@ -739,8 +719,8 @@ definePropertyHidden(HODBCINSTPROPERTY hLastProperty, const char *name, const ch
 {
 	hLastProperty = addProperty(hLastProperty);
 	hLastProperty->nPromptType = ODBCINST_PROMPTTYPE_HIDDEN;
-	strlcpy(hLastProperty->szName, name, INI_MAX_PROPERTY_NAME);
-	strlcpy(hLastProperty->szValue, value, INI_MAX_PROPERTY_VALUE);
+	tds_strlcpy(hLastProperty->szName, name, INI_MAX_PROPERTY_NAME);
+	tds_strlcpy(hLastProperty->szValue, value, INI_MAX_PROPERTY_VALUE);
 	hLastProperty->pszHelp = (char *) strdup(comment);
 	return hLastProperty;
 }
@@ -752,8 +732,8 @@ definePropertyList(HODBCINSTPROPERTY hLastProperty, const char *name, const char
 	hLastProperty->nPromptType = ODBCINST_PROMPTTYPE_LISTBOX;
 	hLastProperty->aPromptData = malloc(size);
 	memcpy(hLastProperty->aPromptData, list, size);
-	strlcpy(hLastProperty->szName, name, INI_MAX_PROPERTY_NAME);
-	strlcpy(hLastProperty->szValue, value, INI_MAX_PROPERTY_VALUE);
+	tds_strlcpy(hLastProperty->szName, name, INI_MAX_PROPERTY_NAME);
+	tds_strlcpy(hLastProperty->szValue, value, INI_MAX_PROPERTY_VALUE);
 	hLastProperty->pszHelp = (char *) strdup(comment);
 	return hLastProperty;
 }
@@ -787,8 +767,7 @@ ODBCINSTGetProperties(HODBCINSTPROPERTY hLastProperty)
 		" 7.0 MSSQL 7\n"
 		" 7.1 MSSQL 2000\n"
 		" 7.2 MSSQL 2005\n"
-		" 7.3 MSSQL 2008\n"
-		" 7.4 MSSQL 2012 or 2014"
+		" 7.3 MSSQL 2008"
 		);
 
 	hLastProperty = definePropertyList(hLastProperty, odbc_param_Language, "us_english", (void*) aLanguage, sizeof(aLanguage),

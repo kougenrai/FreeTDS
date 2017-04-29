@@ -28,6 +28,7 @@
 #include <freetds/tds.h>
 #include "replacements.h"
 
+TDS_RCSID(var, "$Id: gettimeofday.c,v 1.6 2011-05-16 08:51:40 freddy77 Exp $");
 /*
  * Number of micro-seconds between the beginning of the Windows epoch
  * (Jan. 1, 1601) and the Unix epoch (Jan. 1, 1970).
@@ -40,7 +41,7 @@
 # define DELTA_EPOCH_IN_USEC  11644473600000000ULL
 #endif
 
-int tds_gettimeofday (struct timeval *tv, void *tz)
+int gettimeofday (struct timeval *tv, void *tz)
 {
 	FILETIME  ft;
 	TDS_UINT8 tim;

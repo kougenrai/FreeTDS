@@ -102,7 +102,7 @@ tds_listen(TDSCONTEXT * ctx, int ip_port)
 		return NULL;
 	}
 	CLOSESOCKET(s);
-	tds = tds_alloc_socket(ctx, 4096);
+	tds = tds_alloc_socket(ctx, 8192);
 	tds_set_s(tds, fd);
 	tds->out_flag = TDS_LOGIN;
 	/* TODO proper charset */
@@ -116,7 +116,7 @@ static int tds_read_string(TDSSOCKET * tds, DSTR * s, int size);
 int
 tds_read_login(TDSSOCKET * tds, TDSLOGIN * login)
 {
-	DSTR blockstr = DSTR_INITIALIZER;
+	DSTR blockstr;
 	TDS_USMALLINT major;
 	int res = 1;
 
@@ -126,6 +126,7 @@ tds_read_login(TDSSOCKET * tds, TDSLOGIN * login)
 			printf("%d %d %c\n",i, tds->in_buf[i], (tds->in_buf[i]>=' ' && tds->in_buf[i]<='z') ? tds->in_buf[i] : ' ');
 	}	
 */
+	tds_dstr_init(&blockstr);
 	res = res && tds_read_string(tds, &login->client_host_name, 30);
 	res = res && tds_read_string(tds, &login->user_name, 30);
 	res = res && tds_read_string(tds, &login->password, 30);
@@ -159,93 +160,54 @@ int
 tds7_read_login(TDSSOCKET * tds, TDSLOGIN * login)
 {
 	int a;
-	unsigned host_name_len, user_name_len, app_name_len, server_name_len;
-	unsigned library_name_len, language_name_len;
-	unsigned auth_len, database_name_len;
+	int host_name_len, user_name_len, app_name_len, server_name_len;
+	int library_name_len, language_name_len;
+	int auth_len, database_name_len;
 	size_t unicode_len, password_len;
 	char *unicode_string, *psrc;
 	char *pbuf;
+	DSTR database;
 	int res = 1;
-	unsigned packet_start, len, start;
-	TDS_UINT packet_len;
 
-	packet_len = tds_get_uint(tds);	/*total packet size */
+	tds_dstr_init(&database);
+
+	a = tds_get_int(tds);	/*total packet size */
 	a = tds_get_int(tds);	/*TDS version */
-	if ((a & 0xff) == 7)
-		tds_set_version(login, a & 0xff, (a >> 8) & 0xff);
-	else
-		tds_set_version(login, (a >> 28) & 0xf, (a >> 24) & 0xf);
-	tds_get_int(tds);	/*desired packet size being requested by client */
-	/* client prog ver (4 byte) + pid (int) + connection id (4 byte) + flag1 (byte) */
-	tds_get_n(tds, NULL, 13);
-	login->option_flag2 = tds_get_byte(tds);
-	/* sql type (byte) + flag3 (byte) + timezone (int) + collation (4 byte) */
-	tds_get_n(tds, NULL, 10);
-
-	packet_start = IS_TDS72_PLUS(tds->conn) ? 86 + 8 : 86;	/* ? */
-	if (packet_len < packet_start)
-		return 0;
-
-#define READ_BUF(len, base_len) do { \
-	start = tds_get_usmallint(tds); \
-	len   = tds_get_usmallint(tds); \
-	if (len != 0 && (start < packet_start || start + base_len * len > packet_len)) \
-		return 0; \
-	} while(0)
-
-	/* hostname */
-	READ_BUF(host_name_len, 2);
-
-	/* username */
-	READ_BUF(user_name_len, 2);
-
-	/* password */
-	READ_BUF(password_len, 2);
-
-	/* app name */
-	READ_BUF(app_name_len, 2);
-
-	/* server */
-	READ_BUF(server_name_len, 2);
-
-	/* unknown */
+	a &= 0xff;
+	login->tds_version = ((a << 4) & 0xff00) | (a & 0xf);
+	a = tds_get_int(tds);	/*desired packet size being requested by client */
+	tds_get_n(tds, NULL, 24);	/*magic1 */
+	a = tds_get_smallint(tds);	/*current position */
+	host_name_len = tds_get_smallint(tds);
+	a = tds_get_smallint(tds);	/*current position */
+	user_name_len = tds_get_smallint(tds);
+	a = tds_get_smallint(tds);	/*current position */
+	password_len = tds_get_smallint(tds);
+	a = tds_get_smallint(tds);	/*current position */
+	app_name_len = tds_get_smallint(tds);
+	a = tds_get_smallint(tds);	/*current position */
+	server_name_len = tds_get_smallint(tds);
 	tds_get_smallint(tds);
 	tds_get_smallint(tds);
-
-	/* library */
-	READ_BUF(library_name_len, 2);
-
-	/* language */
-	READ_BUF(language_name_len, 2);
-
-	/* database */
-	READ_BUF(database_name_len, 2);
-
-	/* client mac address */
-	tds_get_n(tds, NULL, 6);
-
-	/* authentication */
-	READ_BUF(auth_len, 1);
-
-	/* db file */
-	READ_BUF(len, 2);
-
-	if (IS_TDS72_PLUS(login)) {
-		/* new password */
-		READ_BUF(len, 2);
-		/* SSPI */
-		tds_get_int(tds);
-	}
+	a = tds_get_smallint(tds);	/*current position */
+	library_name_len = tds_get_smallint(tds);
+	a = tds_get_smallint(tds);	/*current position */
+	language_name_len = tds_get_smallint(tds);
+	a = tds_get_smallint(tds);
+	database_name_len = tds_get_smallint(tds);
+	tds_get_n(tds, NULL, 6);	/* client mac address */
+	a = tds_get_smallint(tds);	/*partial packet size */
+	auth_len = tds_get_smallint(tds);	/*authentication len */
+	a = tds_get_smallint(tds);	/*total packet size */
+	tds_get_smallint(tds);
 
 	res = res && tds_dstr_get(tds, &login->client_host_name, host_name_len);
 	res = res && tds_dstr_get(tds, &login->user_name, user_name_len);
 
 	unicode_len = password_len * 2;
-	unicode_string = tds_new(char, unicode_len);
-	if (!unicode_string || !tds_dstr_alloc(&login->password, password_len)) {
-		free(unicode_string);
+	unicode_string = (char *) malloc(unicode_len);
+	if (!unicode_string || !tds_dstr_alloc(&login->password, password_len))
 		return 0;
-	}
 	tds_get_n(tds, unicode_string, unicode_len);
 	tds7_decrypt_pass((unsigned char *) unicode_string, unicode_len, (unsigned char *) unicode_string);
 	pbuf = tds_dstr_buf(&login->password);
@@ -256,8 +218,7 @@ tds7_read_login(TDSSOCKET * tds, TDSLOGIN * login)
 			 &password_len);
 	if (a < 0 ) {
 		fprintf(stderr, "error: %s:%d: tds7_read_login: tds_iconv() failed\n", __FILE__, __LINE__);
-		free(unicode_string);
-		return 0;
+		assert(-1 != a);
 	}
 	tds_dstr_setlen(&login->password, pbuf - tds_dstr_buf(&login->password));
 	free(unicode_string);
@@ -266,7 +227,9 @@ tds7_read_login(TDSSOCKET * tds, TDSLOGIN * login)
 	res = res && tds_dstr_get(tds, &login->server_name, server_name_len);
 	res = res && tds_dstr_get(tds, &login->library, library_name_len);
 	res = res && tds_dstr_get(tds, &login->language, language_name_len);
-	res = res && tds_dstr_get(tds, &login->database, database_name_len);
+	/* TODO use it */
+	res = res && tds_dstr_get(tds, &database, database_name_len);
+	tds_dstr_free(&database);
 
 	tds_get_n(tds, NULL, auth_len);
 
@@ -326,7 +289,7 @@ tds_alloc_read_login(TDSSOCKET * tds)
 
 	/* Use the packet type to determine which login format to expect */
 	switch (tds->in_flag) {
-	case TDS_LOGIN: /* TDS4/5 login */
+	case 0x02: /* TDS4/5 login */
 		tds->conn->tds_version = 0x402;
 		if (!tds_read_login(tds, login)) {
 			tds_free_login(login);
@@ -337,7 +300,7 @@ tds_alloc_read_login(TDSSOCKET * tds)
 		}
 		break;
 
-	case TDS7_LOGIN: /* TDS7+ login */
+	case 0x10: /* TDS7+ login */
 		tds->conn->tds_version = 0x700;
 		if (!tds7_read_login(tds, login)) {
 			tds_free_login(login);
@@ -345,7 +308,7 @@ tds_alloc_read_login(TDSSOCKET * tds)
 		}
 		break;
 
-	case TDS71_PRELOGIN: /* TDS7.1+ prelogin, hopefully followed by a login */
+	case 0x12: /* TDS7.1+ prelogin, hopefully followed by a login */
 		tds->conn->tds_version = 0x701;
 		/* ignore client and just send our reply TODO... finish */
 		tds71_send_prelogin(tds);

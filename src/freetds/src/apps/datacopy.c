@@ -78,10 +78,10 @@ typedef struct pd
 
 static void pusage(void);
 static int process_parameters(int, char **, struct pd *);
-static int login_to_databases(const BCPPARAMDATA * pdata, DBPROCESS ** dbsrc, DBPROCESS ** dbdest);
+static int login_to_databases(BCPPARAMDATA * pdata, DBPROCESS ** dbsrc, DBPROCESS ** dbdest);
 static int create_target_table(char *sobjname, char *owner, char *dobjname, DBPROCESS * dbsrc, DBPROCESS * dbdest);
 static int check_table_structures(char *sobjname, char *dobjname, DBPROCESS * dbsrc, DBPROCESS * dbdest);
-static int transfer_data(const BCPPARAMDATA * params, DBPROCESS * dbsrc, DBPROCESS * dbdest);
+static int transfer_data(BCPPARAMDATA params, DBPROCESS * dbsrc, DBPROCESS * dbdest);
 static RETCODE set_textsize(DBPROCESS *dbproc, int textsize);
 
 static int err_handler(DBPROCESS *, int, int, int, char *, char *);
@@ -129,7 +129,7 @@ main(int argc, char **argv)
 		return 1;
 	}
 
-	if (transfer_data(&params, dbsrc, dbtarget) == FALSE) {
+	if (transfer_data(params, dbsrc, dbtarget) == FALSE) {
 		printf("datacopy: table copy failed.\n");
 		printf("           the data may have been partially copied into the target database \n");
 		dbclose(dbsrc);
@@ -315,11 +315,10 @@ process_parameters(int argc, char **argv, BCPPARAMDATA * pdata)
 }
 
 static int
-login_to_databases(const BCPPARAMDATA * pdata, DBPROCESS ** dbsrc, DBPROCESS ** dbdest)
+login_to_databases(BCPPARAMDATA * pdata, DBPROCESS ** dbsrc, DBPROCESS ** dbdest)
 {
-	int result = FALSE;
-	LOGINREC *slogin = NULL;
-	LOGINREC *dlogin = NULL;
+	LOGINREC *slogin;
+	LOGINREC *dlogin;
 
 	/* Initialize DB-Library. */
 
@@ -359,12 +358,12 @@ login_to_databases(const BCPPARAMDATA * pdata, DBPROCESS ** dbsrc, DBPROCESS ** 
 
 	if ((*dbsrc = dbopen(slogin, pdata->src.server)) == (DBPROCESS *) NULL) {
 		fprintf(stderr, "Can't connect to source server.\n");
-		goto cleanup;
+		return FALSE;
 	}
 
 	if (dbuse(*dbsrc, pdata->src.db) == FAIL) {
 		fprintf(stderr, "Can't change database to %s .\n", pdata->src.db);
-		goto cleanup;
+		return FALSE;
 	}
 
 	dlogin = dblogin();
@@ -391,20 +390,16 @@ login_to_databases(const BCPPARAMDATA * pdata, DBPROCESS ** dbsrc, DBPROCESS ** 
 
 	if ((*dbdest = dbopen(dlogin, pdata->dest.server)) == (DBPROCESS *) NULL) {
 		fprintf(stderr, "Can't connect to destination server.\n");
-		goto cleanup;
+		return FALSE;
 	}
 
 	if (dbuse(*dbdest, pdata->dest.db) == FAIL) {
 		fprintf(stderr, "Can't change database to %s .\n", pdata->dest.db);
-		goto cleanup;
+		return FALSE;
 	}
 
-	result = TRUE;
+	return TRUE;
 
-cleanup:
-	dbloginfree(slogin);
-	dbloginfree(dlogin);
-	return result;
 }
 
 static int
@@ -416,6 +411,8 @@ create_target_table(char *sobjname, char *owner, char *dobjname, DBPROCESS * dbs
 
 	DBINT num_cols;
 	DBCOL2 colinfo;
+#define strcat(d, s) tds_strlcat(d, s, sizeof(d))
+
 
 	sprintf(ls_command, "SET FMTONLY ON select * from %s SET FMTONLY OFF", sobjname);
 
@@ -443,21 +440,22 @@ create_target_table(char *sobjname, char *owner, char *dobjname, DBPROCESS * dbs
 		if (dbtablecolinfo(dbsrc, i, (DBCOL *) &colinfo) != SUCCEED)
 			return FALSE;
 
-		strlcat(ls_command, sep, sizeof(ls_command));
+		strcat(ls_command, sep);
 		sep = ", ";
 
-		strlcat(ls_command, colinfo.Name, sizeof(ls_command));
-		strlcat(ls_command, " ", sizeof(ls_command));
+		strcat(ls_command, colinfo.Name);
+		strcat(ls_command, " ");
 
-		strlcat(ls_command, colinfo.ServerTypeDeclaration, sizeof(ls_command));
+		strcat(ls_command, colinfo.ServerTypeDeclaration);
 
 		if (colinfo.Null == TRUE) {
-			strlcat(ls_command, " NULL", sizeof(ls_command));
+			strcat(ls_command, " NULL");
 		} else {
-			strlcat(ls_command, " NOT NULL", sizeof(ls_command));
+			strcat(ls_command, " NOT NULL");
 		}
 	}
-	if (strlcat(ls_command, " )", sizeof(ls_command)) >= sizeof(ls_command)) {
+#undef strcat
+	if (tds_strlcat(ls_command, " )", sizeof(ls_command)) >= sizeof(ls_command)) {
 		fprintf(stderr, "Buffer overflow building command to create table\n");
 		return FALSE;
 	}
@@ -499,7 +497,7 @@ static int
 check_table_structures(char *sobjname, char *dobjname, DBPROCESS * dbsrc, DBPROCESS * dbdest)
 {
 	char ls_command[256];
-	int i, ret;
+	int i;
 
 	DBINT src_numcols = 0;
 	DBINT dest_numcols = 0;
@@ -520,15 +518,13 @@ check_table_structures(char *sobjname, char *dobjname, DBPROCESS * dbsrc, DBPROC
 		return FALSE;
 	}
 
-	while ((ret=dbresults(dbsrc)) == SUCCEED)
-		src_numcols = dbnumcols(dbsrc);
-	if (ret != NO_MORE_RESULTS) {
-		printf("Error in dbresults\n");
-		return FALSE;
-	}
-	if (0 == src_numcols) {
-		printf("Error in dbnumcols 1\n");
-		return FALSE;
+	while (NO_MORE_RESULTS != dbresults(dbsrc));
+	{
+
+		if (0 == (src_numcols = dbnumcols(dbsrc))) {
+			printf("Error in dbnumcols\n");
+			return FALSE;
+		}
 	}
 
 	sprintf(ls_command, "SET FMTONLY ON select * from %s SET FMTONLY OFF", dobjname);
@@ -543,15 +539,13 @@ check_table_structures(char *sobjname, char *dobjname, DBPROCESS * dbsrc, DBPROC
 		return FALSE;
 	}
 
-	while ((ret=dbresults(dbdest)) == SUCCEED)
-		dest_numcols = dbnumcols(dbdest);
-	if (ret != NO_MORE_RESULTS) {
-		printf("Error in dbresults\n");
-		return FALSE;
-	}
-	if (0 == dest_numcols) {
-		printf("Error in dbnumcols 2\n");
-		return FALSE;
+	while (NO_MORE_RESULTS != dbresults(dbdest));
+	{
+
+		if (0 == (dest_numcols = dbnumcols(dbdest))) {
+			printf("Error in dbnumcols\n");
+			return FALSE;
+		}
 	}
 
 	if (src_numcols != dest_numcols) {
@@ -583,7 +577,7 @@ check_table_structures(char *sobjname, char *dobjname, DBPROCESS * dbsrc, DBPROC
 }
 
 static int
-transfer_data(const BCPPARAMDATA * params, DBPROCESS * dbsrc, DBPROCESS * dbdest)
+transfer_data(BCPPARAMDATA params, DBPROCESS * dbsrc, DBPROCESS * dbdest)
 {
 	char ls_command[256];
 	int col;
@@ -609,13 +603,13 @@ transfer_data(const BCPPARAMDATA * params, DBPROCESS * dbsrc, DBPROCESS * dbdest
 	DBCOL2 colinfo;
 	BOOL identity_column_exists = FALSE;
 
-	if (params->vflag) {
+	if (params.vflag) {
 		printf("\nStarting copy...\n");
 	}
 
-	if (params->tflag) {
+	if (params.tflag) {
 
-		sprintf(ls_command, "truncate table %s", params->dest.dbobject);
+		sprintf(ls_command, "truncate table %s", params.dest.dbobject);
 
 		if (dbcmd(dbdest, ls_command) == FAIL) {
 			printf("dbcmd failed\n");
@@ -634,7 +628,7 @@ transfer_data(const BCPPARAMDATA * params, DBPROCESS * dbsrc, DBPROCESS * dbdest
 	}
 
 
-	sprintf(ls_command, "select * from %s", params->src.dbobject);
+	sprintf(ls_command, "select * from %s", params.src.dbobject);
 
 	if (dbcmd(dbsrc, ls_command) == FAIL) {
 		printf("dbcmd failed\n");
@@ -646,7 +640,8 @@ transfer_data(const BCPPARAMDATA * params, DBPROCESS * dbsrc, DBPROCESS * dbdest
 		return FALSE;
 	}
 
-	if (NO_MORE_RESULTS != dbresults(dbsrc)) {
+	if (NO_MORE_RESULTS != dbresults(dbsrc));
+	{
 		if (0 == (src_numcols = dbnumcols(dbsrc))) {
 			printf("Error in dbnumcols\n");
 			return FALSE;
@@ -655,7 +650,7 @@ transfer_data(const BCPPARAMDATA * params, DBPROCESS * dbsrc, DBPROCESS * dbdest
 
 
 
-	if (bcp_init(dbdest, params->dest.dbobject, (char *) NULL, (char *) NULL, DB_IN) == FAIL) {
+	if (bcp_init(dbdest, params.dest.dbobject, (char *) NULL, (char *) NULL, DB_IN) == FAIL) {
 		printf("Error in bcp_init\n");
 		return FALSE;
 	}
@@ -686,10 +681,6 @@ transfer_data(const BCPPARAMDATA * params, DBPROCESS * dbsrc, DBPROCESS * dbdest
 		case SYBMONEY4:
 		case SYBDATETIME:
 		case SYBDATETIME4:
-		case SYBTIME:
-		case SYBDATE:
-		case SYBBIGTIME:
-		case SYBBIGDATETIME:
 		case SYBCHAR:
 		case SYBTEXT:
 		case SYBBINARY:
@@ -704,7 +695,7 @@ transfer_data(const BCPPARAMDATA * params, DBPROCESS * dbsrc, DBPROCESS * dbdest
 	}
 
 	/* Take appropriate action if there's an identity column and we've been asked to preserve identity values. */
-	if (params->Eflag && identity_column_exists)
+	if (params.Eflag && identity_column_exists)
 		bcp_control(dbdest, BCPKEEPIDENTITY, 1);
 
 	gettimeofday(&start_time, 0);
@@ -724,10 +715,6 @@ transfer_data(const BCPPARAMDATA * params, DBPROCESS * dbsrc, DBPROCESS * dbdest
 			case SYBREAL:
 			case SYBDATETIME:
 			case SYBDATETIME4:
-			case SYBTIME:
-			case SYBDATE:
-			case SYBBIGTIME:
-			case SYBBIGDATETIME:
 			case SYBMONEY:
 			case SYBMONEY4:
 			case SYBCHAR:
@@ -753,7 +740,7 @@ transfer_data(const BCPPARAMDATA * params, DBPROCESS * dbsrc, DBPROCESS * dbdest
 			return FALSE;
 		} else {
 			rows_sent++;
-			if (rows_sent == params->batchsize) {
+			if (rows_sent == params.batchsize) {
 				ret = bcp_batch(dbdest);
 				if (ret == -1) {
 					printf("bcp_batch error\n");
@@ -783,7 +770,7 @@ transfer_data(const BCPPARAMDATA * params, DBPROCESS * dbsrc, DBPROCESS * dbdest
 	elapsed_time = (double) (end_time.tv_sec - start_time.tv_sec) +
 		((double) (end_time.tv_usec - start_time.tv_usec) / 1000000.00);
 
-	if (params->vflag) {
+	if (params.vflag) {
 		printf("\n");
 		printf("rows read            : %d\n", rows_read);
 		printf("rows written         : %d\n", rows_done);

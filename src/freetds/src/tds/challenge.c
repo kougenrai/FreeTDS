@@ -45,6 +45,13 @@
 #include "des.h"
 #include "replacements.h"
 
+#ifdef HAVE_GNUTLS
+#include <gnutls/gnutls.h>
+#include <gnutls/crypto.h>
+#elif defined(HAVE_OPENSSL)
+#include <openssl/rand.h>
+#endif
+
 /**
  * \ingroup libtds
  * \defgroup auth Authentication
@@ -125,6 +132,29 @@ convert_to_usc2le_string(TDSSOCKET * tds, const char *s, size_t len, char *out)
 		return (size_t) -1;
 
 	return ob - out;
+}
+
+
+static void
+generate_random_buffer(unsigned char *out, int len)
+{
+	int i;
+
+#ifdef HAVE_GNUTLS
+	if (gnutls_rnd(GNUTLS_RND_RANDOM, out, len) >= 0)
+		return;
+	if (gnutls_rnd(GNUTLS_RND_NONCE, out, len) >= 0)
+		return;
+#elif defined(HAVE_OPENSSL)
+	if (RAND_bytes(out, len) == 1)
+		return;
+	if (RAND_pseudo_bytes(out, len) >= 0)
+		return;
+#endif
+
+	/* TODO find a better random... */
+	for (i = 0; i < len; ++i)
+		out[i] = rand() / (RAND_MAX / 256);
 }
 
 static TDSRET
@@ -224,7 +254,7 @@ make_lm_v2_response(const unsigned char ntlm_v2_hash[16],
 	int mac_len = 16 + client_data_len;
 	unsigned char *mac;
 
-	mac = tds_new(unsigned char, mac_len);
+	mac = (unsigned char*) malloc(mac_len);
 	if (!mac)
 		return NULL;
 
@@ -249,9 +279,6 @@ tds_answer_challenge_ntlmv2(TDSSOCKET * tds,
 	unsigned char *lm_v2_response;
 	unsigned char ntlm_v2_hash[16];
 	const names_blob_prefix_t *names_blob_prefix;
-
-	if (!names_blob)
-		return TDS_FAIL;
 
 	res = make_ntlm_v2_hash(tds, passwd, ntlm_v2_hash);
 	if (TDS_FAILED(res))
@@ -308,7 +335,7 @@ tds_answer_challenge(TDSSOCKET * tds,
 		/* NTLM2 */
 		MD5_CTX md5_ctx;
 
-		tds_random_buffer(hash, 8);
+		generate_random_buffer(hash, 8);
 		memset(hash + 8, 0, 16);
 		memcpy(answer->lm_resp, hash, 24);
 
@@ -584,7 +611,7 @@ fill_names_blob_prefix(names_blob_prefix_t * prefix)
 	tds_swap_bytes(&nttime, 8);
 #endif
 	prefix->timestamp = nttime;
-	tds_random_buffer(prefix->challenge, sizeof(prefix->challenge));
+	generate_random_buffer(prefix->challenge, sizeof(prefix->challenge));
 
 	prefix->unknown = 0x00000000;
 }
@@ -661,7 +688,7 @@ tds_ntlm_handle_next(TDSSOCKET * tds, struct tds_authentication * auth, size_t l
 			names_blob_len = TDS_OFFSET(names_blob_prefix_t, target_info) + target_info_len + 4;
 
 			/* read Target Info */
-			names_blob = tds_new0(unsigned char, names_blob_len);
+			names_blob = (unsigned char *) calloc(names_blob_len, 1);
 			if (!names_blob)
 				return TDS_FAIL;
 
@@ -711,7 +738,7 @@ tds_ntlm_get_auth(TDSSOCKET * tds)
 	domain = user_name;
 	domain_len = (int)(p - user_name);
 
-	auth = tds_new0(struct tds_ntlm_auth, 1);
+	auth = (struct tds_ntlm_auth *) calloc(1, sizeof(struct tds_ntlm_auth));
 
 	if (!auth)
 		return NULL;
@@ -720,7 +747,7 @@ tds_ntlm_get_auth(TDSSOCKET * tds)
 	auth->tds_auth.handle_next = tds_ntlm_handle_next;
 
 	auth->tds_auth.packet_len = auth_len = 40 + host_name_len + domain_len;
-	auth->tds_auth.packet = packet = tds_new(TDS_UCHAR, auth_len);
+	auth->tds_auth.packet = packet = (TDS_UCHAR*) malloc(auth_len);
 	if (!packet) {
 		free(auth);
 		return NULL;

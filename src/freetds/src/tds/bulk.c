@@ -39,7 +39,7 @@
 #include <assert.h>
 
 #include <freetds/tds.h>
-#include <freetds/checks.h>
+#include "tds_checks.h"
 #include <freetds/bytes.h>
 #include <freetds/iconv.h>
 #include <freetds/stream.h>
@@ -97,7 +97,7 @@ tds_bcp_init(TDSSOCKET *tds, TDSBCPINFO *bcpinfo)
 	else
 		fmt = "SET FMTONLY ON %s SET FMTONLY OFF";
 
-	if (TDS_FAILED(rc=tds_submit_queryf(tds, fmt, tds_dstr_cstr(&bcpinfo->tablename))))
+	if (TDS_FAILED(rc=tds_submit_queryf(tds, fmt, bcpinfo->tablename)))
 		/* TODO return an error ?? */
 		/* Attempt to use Bulk Copy with a non-existent Server table (might be why ...) */
 		return rc;
@@ -173,7 +173,7 @@ tds_bcp_init(TDSSOCKET *tds, TDSBCPINFO *bcpinfo)
 	}
 
 	if (!IS_TDS7_PLUS(tds->conn)) {
-		bindinfo->current_row = tds_new(unsigned char, bindinfo->row_size);
+		bindinfo->current_row = (unsigned char*) malloc(bindinfo->row_size);
 		if (!bindinfo->current_row)
 			goto cleanup;
 		bindinfo->row_free = tds_bcp_row_free;
@@ -181,7 +181,7 @@ tds_bcp_init(TDSSOCKET *tds, TDSBCPINFO *bcpinfo)
 
 	if (bcpinfo->identity_insert_on) {
 
-		rc = tds_submit_queryf(tds, "set identity_insert %s on", tds_dstr_cstr(&bcpinfo->tablename));
+		rc = tds_submit_queryf(tds, "set identity_insert %s on", bcpinfo->tablename);
 		if (TDS_FAILED(rc))
 			goto cleanup;
 
@@ -230,7 +230,7 @@ tds7_build_bulk_insert_stmt(TDSSOCKET * tds, TDSPBCB * clause, TDSCOLUMN * bcpco
 	    + tds_quote_id(tds, NULL, tds_dstr_cstr(&bcpcol->column_name), tds_dstr_len(&bcpcol->column_name))
 	    + strlen(column_type)
 	    + ((first) ? 2u : 4u)) {
-		char *temp = tds_new(char, 2 * clause->cb);
+		char *temp = (char*) malloc(2 * clause->cb);
 
 		if (!temp) {
 			tdserror(tds_get_ctx(tds), tds, TDSEMEM, errno);
@@ -301,7 +301,7 @@ tds_bcp_start_insert_stmt(TDSSOCKET * tds, TDSBCPINFO * bcpinfo)
 			return TDS_FAIL;
 		}
 
-		erc = asprintf(&query, "insert bulk %s (%s)%s", tds_dstr_cstr(&bcpinfo->tablename), colclause.pb, hint);
+		erc = asprintf(&query, "insert bulk %s (%s)%s", bcpinfo->tablename, colclause.pb, hint);
 
 		free(hint);
 		if (colclause.from_malloc)
@@ -311,7 +311,7 @@ tds_bcp_start_insert_stmt(TDSSOCKET * tds, TDSBCPINFO * bcpinfo)
 			return TDS_FAIL;
 	} else {
 		/* NOTE: if we use "with nodescribe" for following inserts server do not send describe */
-		if (asprintf(&query, "insert bulk %s", tds_dstr_cstr(&bcpinfo->tablename)) < 0)
+		if (asprintf(&query, "insert bulk %s", bcpinfo->tablename) < 0)
 			return TDS_FAIL;
 	}
 
@@ -760,10 +760,9 @@ tds7_bcp_send_colmetadata(TDSSOCKET *tds, TDSBCPINFO *bcpinfo)
 		 * different from BCP format
 		 */
 		if (is_blob_type(bcpcol->on_server.column_type)) {
-			/* FIXME support multibyte string */
-			len = tds_dstr_len(&bcpinfo->tablename);
-			TDS_PUT_SMALLINT(tds, len);
-			tds_put_string(tds, tds_dstr_cstr(&bcpinfo->tablename), len);
+			/* FIXME strlen return len in bytes not in characters required here */
+			TDS_PUT_SMALLINT(tds, strlen(bcpinfo->tablename));
+			tds_put_string(tds, bcpinfo->tablename, (int)strlen(bcpinfo->tablename));
 		}
 		/* FIXME support multibyte string */
 		len = tds_dstr_len(&bcpcol->column_name);
@@ -1031,7 +1030,7 @@ tds_bcp_fread(TDSSOCKET * tds, TDSICONV * char_conv, FILE * stream, const char *
 	r.stream.read = tds_file_stream_read;
 	r.f = stream;
 	r.term_len = term_len;
-	r.left = tds_new0(char, term_len*3);
+	r.left = calloc(1, term_len*3);
 	r.left_pos = 0;
 	if (!r.left) return TDS_FAIL;
 

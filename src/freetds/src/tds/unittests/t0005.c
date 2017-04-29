@@ -17,7 +17,9 @@
  * Boston, MA 02111-1307, USA.
  */
 #include "common.h"
-#include <replacements.h>
+
+static char software_version[] = "$Id: t0005.c,v 1.19 2011-05-16 13:31:11 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
 
 static char *value_as_string(TDSSOCKET * tds, int col_idx);
 
@@ -107,7 +109,8 @@ value_as_string(TDSSOCKET * tds, int col_idx)
 
 	switch (type) {
 	case SYBVARCHAR:
-		strlcpy(result, (const char *) value, sizeof(result));
+		strncpy(result, (const char *) value, sizeof(result) - 1);
+		result[sizeof(result) - 1] = '\0';
 		break;
 	case SYBINT4:
 		sprintf(result, "%d", *(const int *) value);

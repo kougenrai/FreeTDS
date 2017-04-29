@@ -20,8 +20,8 @@
 
 # OpenVMS description file for FreeTDS
 
-# To override default TDS version of "auto" specify /MACRO="TDSVER=TDSxx=1"
-# where xx is one of 42, 46, 50, 70, 71, 72, 73, or 74.
+# To override default TDS version of 5.0 specify /MACRO="TDSVER=TDSxx"
+# where xx is one of 42, 46, 50, 70, or 80.
 
 # To build with ODBC support do MM(K|S)/MACRO="ODBC"=1
 # This presupposes the existence of an ODBC library in the location pointed to
@@ -32,6 +32,10 @@
 
 # To build with MSDBLIB-compatbile dblib structures, do MM(K|S)/MACRO="MSDBLIB"=1
 
+.IFDEF TDSVER
+.ELSE
+TDSVER = TDS50
+.ENDIF
 
 OBJ = .OBJ
 E = .EXE
@@ -66,53 +70,23 @@ CC = CC/DECC
 .SUFFIXES :
 .SUFFIXES : $(E) $(OLB) $(OBJ) .C .H
 
-@ENABLE_THREAD_SAFE@
-.IFDEF ENABLE_THREAD_SAFE
-PTHREAD_CDEFINE = "_THREAD_SAFE"=1
-PTHREAD_LINK_FLAGS = /THREADS=UPCALLS
-.ELSE
-PTHREAD_CDEFINE =
-PTHREAD_LINK_FLAGS =
-.ENDIF
-
-CDEFINE =
-
-.IFDEF TDSVER
-CDEFINE = $(TDSVER)
-.ENDIF
-
 .IFDEF ODBC
-ODBC_CDEFINE = "UNIXODBC"
+CDEFINE = "$(TDSVER)","UNIXODBC"
 CODBCFLAGS = /NAMES=(AS_IS,SHORTENED)
 .ELSE
-ODBC_CDEFINE =
+CDEFINE = $(TDSVER)
 CODBCFLAGS = /NAMES=SHORTENED
 .ENDIF
-
-.IFDEF ODBC_CDEFINE
-.IFDEF CDEFINE
-CDEFINE = $(CDEFINE),$(ODBC_CDEFINE)
-.ELSE
-CDEFINE = $(ODBC_CDEFINE)
-.ENDIF
-.ENDIF
-
-.IFDEF PTHREAD_CDEFINE
-.IFDEF CDEFINE
-CDEFINE = $(CDEFINE),$(PTHREAD_CDEFINE)
-.ELSE
-CDEFINE = $(PTHREAD_CDEFINE)
-.ENDIF
-.ENDIF
-
-.IFDEF CDEFINE
-CDEFINE_QUAL = /DEFINE=($(CDEFINE))
-.ELSE
-CDEFINE_QUAL =
-.ENDIF
-
 CPREFIX = ALL
 CINCLUDE = "./","./include"$(ODBC_INC)
+
+@ENABLE_THREAD_SAFE@
+.IFDEF ENABLE_THREAD_SAFE
+CDEFINE = $(CDEFINE),"_THREAD_SAFE"=1
+PTHREAD_LINK_FLAGS = /THREADS=UPCALLS
+.ELSE
+PTHREAD_LINK_FLAGS = 
+.ENDIF
 
 .IFDEF __DEBUG__
 CDBGFLAGS = /DEBUG/NOOPTIMIZE/LIST=$(MMS$TARGET_NAME)/SHOW=(EXPANSION,INCLUDE)
@@ -122,7 +96,7 @@ CDBGFLAGS =
 LDBGFLAGS = /NOTRACE
 .ENDIF
 
-CFLAGS = $(CDEFINE_QUAL)/PREFIX=($(CPREFIX))/FLOAT=IEEE/IEEE=DENORM/OBJECT=$(MMS$TARGET_NAME)$(OBJ) $(CODBCFLAGS) $(CDBGFLAGS)
+CFLAGS = /DEFINE=($(CDEFINE))/PREFIX=($(CPREFIX))/FLOAT=IEEE/IEEE=DENORM/OBJECT=$(MMS$TARGET_NAME)$(OBJ) $(CODBCFLAGS) $(CDBGFLAGS)
 LINKFLAGS = $(LDBGFLAGS)$(PTHREAD_LINK_FLAGS)
 
 .c$(OBJ) :
@@ -139,7 +113,6 @@ VASPRINTFOBJ = @VASPRINTFOBJ@
 STRTOK_ROBJ = @STRTOK_ROBJ@
 LIBICONVOBJ = @LIBICONVOBJ@
 SNPRINTFOBJ = @SNPRINTFOBJ@
-SOCKETPAIROBJ = @SOCKETPAIROBJ@
 
 TDSOBJS = [.src.tds]bulk$(OBJ), [.src.tds]challenge$(OBJ), [.src.tds]config$(OBJ), \
 	[.src.tds]convert$(OBJ), [.src.tds]data$(OBJ), [.src.tds]des$(OBJ), [.src.tds]getmac$(OBJ), \
@@ -149,10 +122,10 @@ TDSOBJS = [.src.tds]bulk$(OBJ), [.src.tds]challenge$(OBJ), [.src.tds]config$(OBJ
 	[.src.tds]threadsafe$(OBJ), [.src.tds]token$(OBJ), [.src.tds]util$(OBJ), \
 	[.src.tds]vstrbuild$(OBJ), [.src.tds]write$(OBJ), [.src.tds]md5$(OBJ), \
 	[.src.tds]net$(OBJ), [.src.tds]tls$(OBJ), [.src.tds]log$(OBJ), [.src.tds]packet$(OBJ), \
-	[.src.tds]stream$(OBJ), [.src.tds]random$(OBJ), [.src.tds]sec_negotiate$(OBJ), \
+	[.src.tds]stream$(OBJ), \
 	[.src.replacements]strlcpy$(OBJ), [.src.replacements]getpassarg$(OBJ), \
-	[.src.replacements]sleep$(OBJ), [.src.replacements]strlcat$(OBJ), \
-	$(ASPRINTFOBJ) $(VASPRINTFOBJ) $(SNPRINTFOBJ) $(STRTOK_ROBJ) $(LIBICONVOBJ) $(SOCKETPAIROBJ) \
+	[.src.replacements]sleep$(OBJ), \
+	$(ASPRINTFOBJ) $(VASPRINTFOBJ) $(SNPRINTFOBJ) $(STRTOK_ROBJ) $(LIBICONVOBJ) \
 	[.vms]getpass$(OBJ)
 
 CTLIBOBJS = [.src.ctlib]blk$(OBJ), [.src.ctlib]cs$(OBJ), [.src.ctlib]ct$(OBJ), \
@@ -499,7 +472,6 @@ dblibcheck :
 	@ run/nodebug []setnull$(E)
 	@ run/nodebug []numeric$(E)
 	@ run/nodebug []pending$(E)
-	@ run/nodebug []cancel$(E)
 	@ set default [---]
 
 tdsodbccheck : 
@@ -610,8 +582,7 @@ dblibtests : [.src.dblib.unittests]rpc$(E)  [.src.dblib.unittests]t0001$(E) [.sr
 	[.src.dblib.unittests]done_handling$(E) [.src.dblib.unittests]timeout$(E) \
 	[.src.dblib.unittests]hang$(E) [.src.dblib.unittests]null$(E) \
 	[.src.dblib.unittests]null2$(E) [.src.dblib.unittests]setnull$(E) \
-	[.src.dblib.unittests]numeric$(E) [.src.dblib.unittests]pending$(E) \
-	[.src.dblib.unittests]cancel$(E)
+	[.src.dblib.unittests]numeric$(E) [.src.dblib.unittests]pending$(E)
 	@ continue
 
 odbctests : [.src.odbc.unittests]t0001$(E) [.src.odbc.unittests]t0002$(E) [.src.odbc.unittests]t0003$(E) \
@@ -1143,12 +1114,6 @@ odbctests : [.src.odbc.unittests]t0001$(E) [.src.odbc.unittests]t0002$(E) [.src.
 [.src.dblib.unittests]pending$(OBJ) : [.src.dblib.unittests]pending.c [.src.dblib.unittests]common.h
 	$(CC) $(CFLAGS)/NOWARN/INCLUDE=([.src.dblib.unittests],$(CINCLUDE)) $(CDBGFLAGS) $(MMS$SOURCE)
 
-[.src.dblib.unittests]cancel$(E) : [.src.dblib.unittests]cancel$(OBJ) [.src.dblib.unittests]common$(OBJ)
-	link$(LINKFLAGS)/exe=$(MMS$TARGET) $(MMS$SOURCE_LIST),[]libsybdb$(OLB)/library,[]libtds$(OLB)/library
-
-[.src.dblib.unittests]cancel$(OBJ) : [.src.dblib.unittests]cancel.c [.src.dblib.unittests]common.h
-	$(CC) $(CFLAGS)/NOWARN/INCLUDE=([.src.dblib.unittests],$(CINCLUDE)) $(CDBGFLAGS) $(MMS$SOURCE)
-
 # tdsodbc test detailed dependencies
 
 [.src.odbc.unittests]t0001$(E) : [.src.odbc.unittests]t0001$(OBJ) [.src.odbc.unittests]common$(OBJ)
@@ -1513,7 +1478,7 @@ odbctests : [.src.odbc.unittests]t0001$(E) [.src.odbc.unittests]t0002$(E) [.src.
 distclean :
 	@ if f$search("[...]*$(OBJ)") .nes. "" then delete/noconfirm [...]*$(OBJ);*
 	@ if f$search("[...]*.LIS") .nes. "" then delete/noconfirm [...]*.LIS;*
-	@ if f$search("[...]*.MAP") .nes. "" then delete/noconfirm [...]*.MAP;*/exclude=[.doc...]*.MAP
+	@ if f$search("[...]*.MAP") .nes. "" then delete/noconfirm [...]*.MAP;*
 	@ if f$search("[...unittests]*$(E)") .nes. "" then delete/noconfirm [...unittests]*$(E);*
 	@ if f$search("[.src.odbc._libs]*$(E)") .nes. "" then delete/noconfirm [.src.odbc._libs]*$(E);*
 	@ if f$search("[...unittests]*.ini") .nes. "" then delete/noconfirm [...unittests]*.ini;*

@@ -5,6 +5,9 @@
  * either SQLConnect and SQLDriverConnect
  */
 
+static char software_version[] = "$Id: connect2.c,v 1.10 2012-03-04 11:33:07 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
+
 static int failed = 0;
 
 static void init_connect(void);
@@ -36,7 +39,6 @@ check_dbname(const char *dbname)
 {
 	SQLINTEGER len;
 	SQLTCHAR out[512];
-	char sql[1024];
 
 	len = sizeof(out);
 	CHKGetConnectAttr(SQL_ATTR_CURRENT_CATALOG, (SQLPOINTER) out, sizeof(out), &len, "SI");
@@ -45,12 +47,6 @@ check_dbname(const char *dbname)
 		fprintf(stderr, "Current database (%s) is not %s\n", C(out), dbname);
 		failed = 1;
 	}
-
-	sprintf(sql, "IF DB_NAME() <> '%s' SELECT 1", dbname);
-	CHKAllocStmt(&odbc_stmt, "S");
-	odbc_check_no_row(sql);
-	SQLFreeStmt(odbc_stmt, SQL_DROP);
-	odbc_stmt = SQL_NULL_HSTMT;
 }
 
 static void

@@ -21,6 +21,18 @@
 #ifndef _tds_sysdep_private_h_
 #define _tds_sysdep_private_h_
 
+/* $Id: tds_sysdep_private.h,v 1.36 2010-12-28 14:37:10 freddy77 Exp $ */
+
+#undef TDS_RCSID
+#if defined(__GNUC__) && __GNUC__ >= 3
+#define TDS_RCSID(name, id) \
+	static const char rcsid_##name[] __attribute__ ((unused)) = id
+#else
+#define TDS_RCSID(name, id) \
+	static const char rcsid_##name[] = id; \
+	static const void *const no_unused_##name##_warn[] = { rcsid_##name, no_unused_##name##_warn }
+#endif
+
 #define TDS_ADDITIONAL_SPACE 16
 
 #ifdef MSG_NOSIGNAL
@@ -51,6 +63,7 @@ extern "C"
 typedef int pid_t;
 #define strcasecmp stricmp
 #define strncasecmp strnicmp
+#define vsnprintf _vsnprintf
 /* TODO this has nothing to do with ip ... */
 #define getpid() _gethostid()
 #endif	/* defined(DOS32X) */
@@ -58,6 +71,7 @@ typedef int pid_t;
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(_WIN64)
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <wspiapi.h>
 #include <windows.h>
 #define READSOCKET(a,b,c)	recv((a), (char *) (b), (c), TDS_NOSIGNAL)
 #define WRITESOCKET(a,b,c)	send((a), (const char *) (b), (c), TDS_NOSIGNAL)
@@ -74,11 +88,8 @@ void tds_socket_done(void);
 #define TDSSOCK_EINPROGRESS WSAEWOULDBLOCK
 #define TDSSOCK_ETIMEDOUT WSAETIMEDOUT
 #define TDSSOCK_WOULDBLOCK(e) ((e)==WSAEWOULDBLOCK)
-#define TDSSOCK_ECONNRESET WSAECONNRESET
 #define sock_errno WSAGetLastError()
-#define set_sock_errno(err) WSASetLastError(err)
 #define sock_strerror(n) tds_prwsaerror(n)
-#define sock_strerror_free(s) tds_prwsaerror_free(s)
 #ifndef __MINGW32__
 typedef DWORD pid_t;
 #endif
@@ -86,9 +97,8 @@ typedef DWORD pid_t;
 #define strcasecmp stricmp
 #undef strncasecmp
 #define strncasecmp strnicmp
-#if defined(HAVE__SNPRINTF) && !defined(HAVE_SNPRINTF)
+#define vsnprintf _vsnprintf
 #define snprintf _snprintf
-#endif
 
 #ifndef WIN32
 #define WIN32 1
@@ -120,13 +130,8 @@ typedef DWORD pid_t;
 #define sock_errno errno
 #endif
 
-#ifndef set_sock_errno
-#define set_sock_errno(err) do { errno = (err); } while(0)
-#endif
-
 #ifndef sock_strerror
 #define sock_strerror(n) strerror(n)
-#define sock_strerror_free(s) do {} while(0)
 #endif
 
 #ifndef TDSSOCK_EINTR
@@ -147,10 +152,6 @@ typedef DWORD pid_t;
 # else
 #  define TDSSOCK_WOULDBLOCK(e) ((e)==EAGAIN)
 # endif
-#endif
-
-#ifndef TDSSOCK_ECONNRESET
-#define TDSSOCK_ECONNRESET ECONNRESET
 #endif
 
 #ifndef INITSOCKET

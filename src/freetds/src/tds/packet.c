@@ -47,7 +47,7 @@
 #include <freetds/bytes.h>
 #include <freetds/iconv.h>
 #include "replacements.h"
-#include <freetds/checks.h>
+#include "tds_checks.h"
 
 #undef MAX
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))
@@ -104,7 +104,6 @@ tds_packet_cache_add(TDSCONNECTION *conn, TDSPACKET *packet)
 	unsigned count = 1;
 
 	assert(conn && packet);
-	tds_mutex_check_owned(&conn->list_mtx);
 
 	if (conn->num_cached_packets >= 8) {
 		tds_free_packets(packet);
@@ -271,7 +270,7 @@ tds_alloc_new_sid(TDSSOCKET *tds)
 			break;
 	if (sid == conn->num_sessions) {
 		/* extend array */
-		s = (TDSSOCKET **) TDS_RESIZE(conn->sessions, sid+64);
+		s = TDS_RESIZE(conn->sessions, sid+64);
 		if (!s)
 			goto error;
 		memset(s + conn->num_sessions, 0, sizeof(*s) * 64);
@@ -462,6 +461,7 @@ static int
 tds_connection_put_packet(TDSSOCKET *tds, TDSPACKET *packet)
 {
 	TDSCONNECTION *conn = tds->conn;
+	static const char zero = 0;
 
 	if (TDS_UNLIKELY(!packet)) {
 		tds_close_socket(tds);
@@ -495,7 +495,7 @@ tds_connection_put_packet(TDSSOCKET *tds, TDSPACKET *packet)
 
 		/* signal thread processing network to handle our packet */
 		/* TODO check result */
-		tds_wakeup_send(&conn->wakeup, 0);
+		send(conn->s_signal, &zero, sizeof(zero), 0);
 
 		/* wait local condition */
 		wait_res = tds_cond_timedwait(&tds->packet_cond, &conn->list_mtx, tds->query_timeout);
@@ -730,8 +730,7 @@ tds_write_packet(TDSSOCKET * tds, unsigned char final)
 	tds->out_buf[0] = tds->out_flag;
 	tds->out_buf[1] = final;
 	TDS_PUT_A2BE(tds->out_buf+2, tds->out_pos);
-	TDS_PUT_A2BE(tds->out_buf+4, tds->conn->client_spid);
-	TDS_PUT_A2(tds->out_buf+6, 0);
+	TDS_PUT_A4(tds->out_buf+4, 0);
 	if (IS_TDS7_PLUS(tds->conn) && !tds->login)
 		tds->out_buf[6] = 0x01;
 
@@ -773,7 +772,7 @@ tds_put_cancel(TDSSOCKET * tds)
 	sent = tds_connection_write(tds, out_buf, 8, 1);
 
 	if (sent > 0)
-		tds->in_cancel = 2;
+		tds->in_cancel = 1;
 
 	/* GW added in check for write() returning <0 and SIGPIPE checking */
 	return sent <= 0 ? TDS_FAIL : TDS_SUCCESS;
@@ -786,7 +785,6 @@ static short
 tds_packet_write(TDSCONNECTION *conn)
 {
 	int sent;
-	int final;
 	TDSPACKET *packet = conn->send_packets;
 
 	assert(packet);
@@ -794,19 +792,9 @@ tds_packet_write(TDSCONNECTION *conn)
 	if (conn->send_pos == 0)
 		tdsdump_dump_buf(TDS_DBG_NETWORK, "Sending packet", packet->buf, packet->len);
 
-	/* take into account other session packets */
-	if (packet->next != NULL)
-		final = 0;
-	/* take into account other packets for this session */
-	else if (packet->buf[0] != TDS72_SMP)
-		final = packet->buf[1] & 1;
-	else if (packet->len >= sizeof(TDS72_SMP_HEADER) + 2)
-		final = packet->buf[sizeof(TDS72_SMP_HEADER) + 1] & 1;
-	else
-		final = 1;
-
+	/* final does not take into account other packets for this session */
 	sent = tds_connection_write(conn->in_net_tds, packet->buf + conn->send_pos,
-				    packet->len - conn->send_pos, final);
+				    packet->len - conn->send_pos, packet->next == NULL);
 
 	if (TDS_UNLIKELY(sent < 0)) {
 		/* TODO tdserror called ?? */

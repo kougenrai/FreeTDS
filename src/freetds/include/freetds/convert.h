@@ -30,6 +30,8 @@ extern "C"
 #endif
 #endif
 
+/* $Id: tdsconvert.h,v 1.29 2011-08-08 12:33:18 freddy77 Exp $ */
+
 typedef union conv_result
 {
 	/* fixed */
@@ -47,10 +49,6 @@ typedef union conv_result
 	TDS_DATETIME dt;
 	TDS_DATETIME4 dt4;
 	TDS_DATETIMEALL dta;
-	TDS_TIME time;
-	TDS_DATE date;
-	TDS_BIGTIME bigtime;
-	TDS_BIGDATETIME bigdatetime;
 	TDS_NUMERIC n;
 	TDS_UNIQUE u;
 
@@ -85,7 +83,7 @@ CONV_RESULT;
 
 unsigned char tds_willconvert(int srctype, int desttype);
 
-TDS_SERVER_TYPE tds_get_null_type(TDS_SERVER_TYPE srctype);
+TDS_INT tds_get_null_type(int srctype);
 TDS_INT tds_char2hex(TDS_CHAR *dest, TDS_UINT destlen, const TDS_CHAR * src, TDS_UINT srclen);
 TDS_INT tds_convert(const TDSCONTEXT * context, int srctype, const TDS_CHAR * src, TDS_UINT srclen, int desttype, CONV_RESULT * cr);
 

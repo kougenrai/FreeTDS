@@ -46,14 +46,9 @@
 #include <sys/stat.h>
 #endif /* HAVE_SYS_STAT_H */
 
-#ifdef HAVE_SYS_SOCKET_H
-#include <sys/socket.h>
-#endif
-
 #include <freetds/tds.h>
 #include <freetds/string.h>
 #include <freetds/tls.h>
-#include <freetds/alloca.h>
 #include "replacements.h"
 
 #include <assert.h>
@@ -67,8 +62,8 @@
 
 #ifdef HAVE_GNUTLS
 #define SSL_RET ssize_t
-#define SSL_PULL_ARGS gnutls_transport_ptr_t ptr, void *data, size_t len
-#define SSL_PUSH_ARGS gnutls_transport_ptr_t ptr, const void *data, size_t len
+#define SSL_PULL_ARGS gnutls_transport_ptr ptr, void *data, size_t len
+#define SSL_PUSH_ARGS gnutls_transport_ptr ptr, const void *data, size_t len
 #define SSL_PTR ptr
 #else
 #define SSL_RET int
@@ -83,7 +78,7 @@ tds_pull_func_login(SSL_PULL_ARGS)
 	TDSSOCKET *tds = (TDSSOCKET *) SSL_PTR;
 	int have;
 
-	tdsdump_log(TDS_DBG_FUNC, "in tds_pull_func_login\n");
+	tdsdump_log(TDS_DBG_INFO1, "in tds_pull_func_login\n");
 	
 	/* here we are initializing (crypted inside TDS packets) */
 
@@ -95,14 +90,18 @@ tds_pull_func_login(SSL_PULL_ARGS)
 
 	for(;;) {
 		have = tds->in_len - tds->in_pos;
+		tdsdump_log(TDS_DBG_INFO1, "have %d\n", have);
 		assert(have >= 0);
 		if (have > 0)
 			break;
+		tdsdump_log(TDS_DBG_INFO1, "before read\n");
 		if (tds_read_packet(tds) < 0)
 			return -1;
+		tdsdump_log(TDS_DBG_INFO1, "after read\n");
 	}
 	if (len > have)
 		len = have;
+	tdsdump_log(TDS_DBG_INFO1, "read %lu bytes\n", (unsigned long int) len);
 	memcpy(data, tds->in_buf + tds->in_pos, len);
 	tds->in_pos += len;
 	return len;
@@ -113,7 +112,7 @@ tds_push_func_login(SSL_PUSH_ARGS)
 {
 	TDSSOCKET *tds = (TDSSOCKET *) SSL_PTR;
 
-	tdsdump_log(TDS_DBG_FUNC, "in tds_push_func_login\n");
+	tdsdump_log(TDS_DBG_INFO1, "in tds_push_func_login\n");
 
 	/* initializing SSL, write crypted data inside normal TDS packets */
 	tds_put_n(tds, data, len);
@@ -126,7 +125,7 @@ tds_pull_func(SSL_PULL_ARGS)
 	TDSCONNECTION *conn = (TDSCONNECTION *) SSL_PTR;
 	TDSSOCKET *tds;
 
-	tdsdump_log(TDS_DBG_FUNC, "in tds_pull_func\n");
+	tdsdump_log(TDS_DBG_INFO1, "in tds_pull_func\n");
 
 #if ENABLE_ODBC_MARS
 	tds = conn->in_net_tds;
@@ -149,15 +148,19 @@ tds_push_func(SSL_PUSH_ARGS)
 	TDSCONNECTION *conn = (TDSCONNECTION *) SSL_PTR;
 	TDSSOCKET *tds;
 
-	tdsdump_log(TDS_DBG_FUNC, "in tds_push_func\n");
+	tdsdump_log(TDS_DBG_INFO1, "in tds_push_func\n");
 
 	/* write to socket directly */
+	/* TODO use cork if available here to flush only on last chunk of packet ?? */
 #if ENABLE_ODBC_MARS
 	tds = conn->in_net_tds;
+	/* FIXME with SMP trick to detect final is not ok */
+	return tds_goodwrite(tds, (const unsigned char*) data, len,
+			     conn->send_packets->next == NULL);
 #else
 	tds = (TDSSOCKET *) conn;
+	return tds_goodwrite(tds, (const unsigned char*) data, len, tds->out_buf[1]);
 #endif
-	return tds_goodwrite(tds, (const unsigned char*) data, len);
 }
 
 static int tls_initialized = 0;
@@ -180,7 +183,7 @@ tds_tls_deinit(void)
 }
 #endif
 
-#if defined(_THREAD_SAFE) && defined(TDS_HAVE_PTHREAD_MUTEX) && !defined(GNUTLS_USE_NETTLE)
+#if defined(_THREAD_SAFE) && defined(TDS_HAVE_PTHREAD_MUTEX)
 GCRY_THREAD_OPTION_PTHREAD_IMPL;
 #define tds_gcry_init() gcry_control(GCRYCTL_SET_THREAD_CBS, &gcry_threads_pthread)
 #else
@@ -271,7 +274,7 @@ tds_x509_crt_check_hostname(gnutls_x509_crt_t cert, const char *hostname)
 
 #if GNUTLS_VERSION_MAJOR < 3
 static int
-tds_certificate_set_x509_system_trust(gnutls_certificate_credentials_t cred)
+tds_certificate_set_x509_system_trust(gnutls_certificate_credentials cred)
 {
 	static const char ca_directory[] = "/etc/ssl/certs";
 	DIR *dir;
@@ -331,11 +334,6 @@ tds_verify_certificate(gnutls_session_t session)
 	int ret;
 	TDSSOCKET *tds = (TDSSOCKET *) gnutls_transport_get_ptr(session);
 
-#ifdef ENABLE_DEVELOPING
-	unsigned int list_size;
-	const gnutls_datum_t *cert_list;
-#endif
-
 	if (!tds->login)
 		return GNUTLS_E_CERTIFICATE_ERROR;
 
@@ -344,40 +342,6 @@ tds_verify_certificate(gnutls_session_t session)
 		tdsdump_log(TDS_DBG_ERROR, "Error verifying certificate: %s\n", gnutls_strerror(ret));
 		return GNUTLS_E_CERTIFICATE_ERROR;
 	}
-
-#ifdef ENABLE_DEVELOPING
-	cert_list = gnutls_certificate_get_peers(session, &list_size);
-	if (cert_list) {
-		gnutls_x509_crt_t cert;
-		gnutls_datum_t cinfo;
-		char buf[8192];
-		size_t size;
-
-		gnutls_x509_crt_init(&cert);
-
-		gnutls_x509_crt_import(cert, &cert_list[0], GNUTLS_X509_FMT_DER);
-
-		/* This is the preferred way of printing short information about
-		 * a certificate. */
-		size = sizeof(buf);
-		ret = gnutls_x509_crt_export(cert, GNUTLS_X509_FMT_PEM, buf, &size);
-		if (ret == 0) {
-			FILE *f = fopen("cert.dat", "wb");
-			if (f) {
-				fwrite(buf, size, 1, f);
-				fclose(f);
-			}
-		}
-
-		ret = gnutls_x509_crt_print(cert, GNUTLS_CRT_PRINT_ONELINE, &cinfo);
-		if (ret == 0) {
-			tdsdump_log(TDS_DBG_INFO1, "Certificate info: %s\n", cinfo.data);
-			gnutls_free(cinfo.data);
-		}
-
-		gnutls_x509_crt_deinit(cert);
-	}
-#endif
 
 	/* Certificate is not trusted */
 	if (status != 0) {
@@ -413,8 +377,8 @@ tds_verify_certificate(gnutls_session_t session)
 TDSRET
 tds_ssl_init(TDSSOCKET *tds)
 {
-	gnutls_session_t session;
-	gnutls_certificate_credentials_t xcred;
+	gnutls_session session;
+	gnutls_certificate_credentials xcred;
 	int ret;
 	const char *tls_msg;
 
@@ -461,9 +425,7 @@ tds_ssl_init(TDSSOCKET *tds)
 			if (ret <= 0)
 				goto cleanup;
 		}
-#ifdef HAVE_GNUTLS_CERTIFICATE_SET_VERIFY_FUNCTION
 		gnutls_certificate_set_verify_function(xcred, tds_verify_certificate);
-#endif
 	}
 
 	/* Initialize TLS session */
@@ -503,14 +465,6 @@ tds_ssl_init(TDSSOCKET *tds)
 	if (ret != 0)
 		goto cleanup;
 
-#ifndef HAVE_GNUTLS_CERTIFICATE_SET_VERIFY_FUNCTION
-	if (!tds_dstr_isempty(&tds->login->cafile)) {
-		ret = tds_verify_certificate(session);
-		if (ret != 0)
-			goto cleanup;
-	}
-#endif
-
 	tdsdump_log(TDS_DBG_INFO1, "handshake succeeded!!\n");
 
 	gnutls_transport_set_ptr(session, tds->conn);
@@ -535,11 +489,11 @@ void
 tds_ssl_deinit(TDSCONNECTION *conn)
 {
 	if (conn->tls_session) {
-		gnutls_deinit((gnutls_session_t) conn->tls_session);
+		gnutls_deinit((gnutls_session) conn->tls_session);
 		conn->tls_session = NULL;
 	}
 	if (conn->tls_credentials) {
-		gnutls_certificate_free_credentials((gnutls_certificate_credentials_t) conn->tls_credentials);
+		gnutls_certificate_free_credentials((gnutls_certificate_credentials) conn->tls_credentials);
 		conn->tls_credentials = NULL;
 	}
 }
@@ -800,12 +754,11 @@ int
 tds_ssl_init(TDSSOCKET *tds)
 {
 #define OPENSSL_CIPHERS \
-	"ECDHE-ECDSA-AES256-SHA ECDHE-ECDSA-AES128-SHA " \
-	"ECDHE-RSA-AES256-SHA ECDHE-RSA-AES128-SHA " \
-	"DHE-RSA-AES256-SHA DHE-RSA-AES128-SHA " \
-	"AES256-SHA AES128-SHA " \
-	"DES-CBC3-SHA DHE-DSS-AES256-SHA " \
-	"DHE-DSS-AES128-SHA EDH-DSS-DES-CBC3-SHA"
+	"DHE-RSA-AES256-SHA DHE-DSS-AES256-SHA " \
+	"AES256-SHA EDH-RSA-DES-CBC3-SHA " \
+	"EDH-DSS-DES-CBC3-SHA DES-CBC3-SHA " \
+	"DES-CBC3-MD5 DHE-RSA-AES128-SHA " \
+	"DHE-DSS-AES128-SHA AES128-SHA RC2-CBC-MD5 RC4-SHA RC4-MD5"
 
 	SSL *con;
 	SSL_CTX *ctx;

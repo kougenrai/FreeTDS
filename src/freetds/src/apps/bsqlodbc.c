@@ -380,7 +380,7 @@ next_query()
 		/* Add the query line to the command to be sent to the server */
 		if (!strlen(query_line))
 			continue;
-		p = (char *) realloc(sql, 1 + (sql? strlen(sql) : 0) + strlen(query_line));
+		p = realloc(sql, 1 + (sql? strlen(sql) : 0) + strlen(query_line));
 		if (!p) {
 			fprintf(stderr, "%s:%d: could not allocate memory\n", options.appname, __LINE__);
 			return NULL;
@@ -587,7 +587,6 @@ print_results(SQLHSTMT hStmt)
 			ret = set_format_string(&metadata[c], (c+1 < ncols)? options.colsep : "\n");
 			if (ret <= 0) {
 				fprintf(stderr, "%s:%d: asprintf(), column %d failed\n", options.appname, __LINE__, c+1);
-				free_metadata(metadata, data, ncols);
 				return;
 			}
 
@@ -602,7 +601,7 @@ print_results(SQLHSTMT hStmt)
 			 * inaccesible to the application.  
 			 */
 
-			data[c].buffer = (char *) calloc(1, bufsize(&metadata[c]));
+			data[c].buffer = calloc(1, bufsize(&metadata[c]));
 			assert(data[c].buffer);
 
 			if ((erc = SQLBindCol(hStmt, c+1, SQL_C_CHAR, (SQLPOINTER)data[c].buffer, 
@@ -673,9 +672,60 @@ print_results(SQLHSTMT hStmt)
 		assert(erc != SQL_STILL_EXECUTING);
 		odbc_perror(hStmt, erc, "SQLMoreResults", "failed");
 		exit(EXIT_FAILURE);
-	}
-	free_metadata(metadata, data, ncols);
+	} 
 }
+
+#if 0 
+static int
+get_printable_size(int type, int size)	/* adapted from src/dblib/dblib.c */
+{
+	switch (type) {
+	case SYBINTN:
+		switch (size) {
+		case 1:
+			return 3;
+		case 2:
+			return 6;
+		case 4:
+			return 11;
+		case 8:
+			return 21;
+		}
+	case SYBINT1:
+		return 3;
+	case SYBINT2:
+		return 6;
+	case SYBINT4:
+		return 11;
+	case SYBINT8:
+		return 21;
+	case SYBVARCHAR:
+	case SYBCHAR:
+		return size;
+	case SYBFLT8:
+		return 11;	/* FIX ME -- we do not track precision */
+	case SYBREAL:
+		return 11;	/* FIX ME -- we do not track precision */
+	case SYBMONEY:
+		return 12;	/* FIX ME */
+	case SYBMONEY4:
+		return 12;	/* FIX ME */
+	case SYBDATETIME:
+		return 26;	/* FIX ME */
+	case SYBDATETIME4:
+		return 26;	/* FIX ME */
+#if 0	/* seems not to be exported to sybdb.h */
+	case SYBBITN:
+#endif
+	case SYBBIT:
+		return 1;
+		/* FIX ME -- not all types present */
+	default:
+		return 0;
+	}
+
+}
+#endif /* 0, not used */
 
 /** 
  * Build the column header format string, based on the column width. 
@@ -764,11 +814,11 @@ get_login(int argc, char *argv[], OPTIONS *options)
 
 	assert(options && argv);
 	
-	options->appname = basename(argv[0]);
+	options->appname = tds_basename(argv[0]);
 	options->colsep = default_colsep; /* may be overridden by -t */
 	options->odbc_version = SQL_OV_ODBC3;	  /* may be overridden by -V */
 	
-	login = (LOGINREC *) calloc(1, sizeof(LOGINREC));
+	login = calloc(1, sizeof(LOGINREC));
 	
 	if (!login) {
 		fprintf(stderr, "%s: unable to allocate login structure\n", options->appname);

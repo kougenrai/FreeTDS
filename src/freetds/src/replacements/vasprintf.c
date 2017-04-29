@@ -32,6 +32,8 @@
 #include <freetds/sysdep_private.h>
 #include "replacements.h"
 
+TDS_RCSID(var, "$Id: vasprintf.c,v 1.23 2011-05-16 08:51:40 freddy77 Exp $");
+
 #if defined(HAVE__VSNPRINTF) && !defined(HAVE_VSNPRINTF)
 #undef HAVE_VSNPRINTF
 #undef vsnprintf
@@ -45,7 +47,7 @@
 
 #define CHUNKSIZE 512
 int
-tds_vasprintf(char **ret, const char *fmt, va_list ap)
+vasprintf(char **ret, const char *fmt, va_list ap)
 {
 #if HAVE__VSCPRINTF
 	int len = _vscprintf(fmt, ap);

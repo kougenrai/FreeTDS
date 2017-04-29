@@ -195,11 +195,8 @@ main(int argc, char *argv[])
 	 * Connect to the server 
 	 */
 	dbproc = dbopen(login, options.servername);
-	if (!dbproc) {
-		fprintf(stderr, "There was a problem connecting to the server.\n");
-		exit(1);
-	}
-
+	assert(dbproc != NULL);
+	
 	/* Switch to the specified database, if any */
 	if (options.database)
 		dbuse(dbproc, options.database);
@@ -214,11 +211,11 @@ main(int argc, char *argv[])
 		static const char query[] = " select	cast(c.text as text)"
 #endif /* MicrosoftsDbLib */
 					 ", number "
-					 " from syscomments c,"
-					 "      sysobjects o"
-					 " where	o.id = c.id"
-					 " and		o.name = '%s'"
-					 " and		o.uid = user_id('%s')"
+					 " from	syscomments  as c"
+					 " join 	sysobjects as o"
+					 " on 		o.id = c.id"
+					 " where	o.name = '%s'"
+					 " and 	o.uid = user_id('%s')"
 					 " and		o.type not in ('U', 'S')" /* no user or system tables */
 					 " order by 	c.number, c.colid"
 					;
@@ -283,10 +280,10 @@ parse_argument(const char argument[], PROCEDURE* procedure)
 		memcpy(procedure->owner, argument, len);
 		procedure->owner[len] = '\0';
 
-		strlcpy(procedure->name, s+1, sizeof(procedure->name));
+		tds_strlcpy(procedure->name, s+1, sizeof(procedure->name));
 	} else {
 		strcpy(procedure->owner, "dbo");
-		strlcpy(procedure->name, argument, sizeof(procedure->name));
+		tds_strlcpy(procedure->name, argument, sizeof(procedure->name));
 	}
 }
 
@@ -329,7 +326,6 @@ print_ddl(DBPROCESS *dbproc, PROCEDURE *procedure)
 	RETCODE erc;
 	int row_code, iresultset, i, ret;
 	int maxnamelen = 0, nrows = 0;
-	char **p_str;
 	
 	create_index = tmpfile();
 	
@@ -341,7 +337,7 @@ print_ddl(DBPROCESS *dbproc, PROCEDURE *procedure)
 	for (iresultset=1; (erc = dbresults(dbproc)) != NO_MORE_RESULTS; iresultset++) {
 		if (erc == FAIL) {
 			fprintf(stderr, "%s:%d: dbresults(), result set %d failed\n", options.appname, __LINE__, iresultset);
-			goto cleanup;
+			return 0;
 		}
 
 		/* Get the data */
@@ -360,19 +356,19 @@ print_ddl(DBPROCESS *dbproc, PROCEDURE *procedure)
 
 				/* name */
 				datlen = dbdatlen(dbproc, 1);
-				index_name = (char *) calloc(1, 1 + datlen);
+				index_name = calloc(1, 1 + datlen);
 				assert(index_name);
 				memcpy(index_name, dbdata(dbproc, 1), datlen);
 				
 				/* kind */
 				datlen = dbdatlen(dbproc, 2);
-				index_description = (char *) calloc(1, 1 + datlen);
+				index_description = calloc(1, 1 + datlen);
 				assert(index_description);
 				memcpy(index_description, dbdata(dbproc, 2), datlen);
 				
 				/* columns */
 				datlen = dbdatlen(dbproc, 3);
-				index_keys = (char *) calloc(1, 1 + datlen);
+				index_keys = calloc(1, 1 + datlen);
 				assert(index_keys);
 				memcpy(index_keys, dbdata(dbproc, 3), datlen);
 				
@@ -425,7 +421,7 @@ print_ddl(DBPROCESS *dbproc, PROCEDURE *procedure)
 			colmap = (0 == strcmp("Computed", dbcolname(dbproc, 3)))? microsoft_colmap : sybase_colmap;
 				
 			/* Make room for the next row */
-			p = (struct DDL *) realloc(ddl, ++nrows * sizeof(struct DDL));
+			p = realloc(ddl, ++nrows * sizeof(struct DDL));
 			if (p == NULL) {
 				perror("error: insufficient memory for row DDL");
 				assert(p !=  NULL);
@@ -451,7 +447,7 @@ print_ddl(DBPROCESS *dbproc, PROCEDURE *procedure)
 					continue;
 				}
 
-				*coldesc[i] = (char *) calloc(1, 1 + datlen); /* calloc will null terminate */
+				*coldesc[i] = calloc(1, 1 + datlen); /* calloc will null terminate */
 				if( *coldesc[i] == NULL ) {
 					perror("error: insufficient memory for row detail");
 					assert(*coldesc[i] != NULL);
@@ -473,9 +469,10 @@ print_ddl(DBPROCESS *dbproc, PROCEDURE *procedure)
 	 * We've collected the description for the columns in the 'ddl' array.  
 	 * Now we'll print the CREATE TABLE statement in jkl's preferred format.  
 	 */
-	if (nrows == 0)
-		goto cleanup;
-
+	if (nrows == 0) {
+		fclose(create_index);
+		return nrows;
+	}
 	printf("%sCREATE TABLE %s.%s\n", use_statement, procedure->owner, procedure->name);
 	for (i=0; i < nrows; i++) {
 		static const char *varytypenames[] =    { "char"  		
@@ -496,7 +493,7 @@ print_ddl(DBPROCESS *dbproc, PROCEDURE *procedure)
 		int is_null;
 
 		/* get size of decimal, numeric, char, and image types */
-		ret = 0;
+		ret = -1;
 		if (0 == strcasecmp("decimal", ddl[i].type) || 0 == strcasecmp("numeric", ddl[i].type)) {
 			if (ddl[i].precision && 0 != strcasecmp("NULL", ddl[i].precision)) {
 				rtrim(ddl[i].precision);
@@ -531,12 +528,7 @@ print_ddl(DBPROCESS *dbproc, PROCEDURE *procedure)
 	while ((i = fgetc(create_index)) != EOF) {
 		fputc(i, stdout);
 	}
-
-cleanup:
-	p_str = (char **) ddl;
-	for (i=0; i < nrows * (sizeof(struct DDL)/sizeof(char*)); ++i)
-		free(p_str[i]);
-	free(ddl);
+	
 	fclose(create_index);
 	return nrows;
 }
@@ -573,11 +565,11 @@ print_results(DBPROCESS *dbproc)
 		/* 
 		 * Bind the columns to our variables.  
 		 */
-		if (sizeof(sql_text) <= dbcollen(dbproc, ctext) ) {
-			assert(sizeof(sql_text) > dbcollen(dbproc, ctext));
+		if (sizeof(sql_text) < dbcollen(dbproc, ctext) ) {
+			assert(sizeof(sql_text) >= dbcollen(dbproc, ctext));
 			return 0;
 		}
-		erc = dbbind(dbproc, ctext, STRINGBIND, 0, (BYTE *) sql_text);
+		erc = dbbind(dbproc, ctext, NTBSTRINGBIND, sizeof(sql_text), (BYTE *) sql_text);
 		if (erc == FAIL) {
 			fprintf(stderr, "%s:%d: dbbind(), column %d failed\n", options.appname, __LINE__, ctext);
 			return -1;
@@ -672,7 +664,7 @@ get_login(int argc, char *argv[], OPTIONS *options)
 
 	assert(options && argv);
 	
-	options->appname = basename(argv[0]);
+	options->appname = tds_basename(argv[0]);
 	
 	login = dblogin();
 	
@@ -694,7 +686,7 @@ get_login(int argc, char *argv[], OPTIONS *options)
 			fdomain = FALSE;
 			break;
 		case 'P':
-			password = tds_getpassarg(optarg);
+			password = getpassarg(optarg);
 			DBSETLPWD(login, password);
 			memset(password, 0, strlen(password));
 			free(password);

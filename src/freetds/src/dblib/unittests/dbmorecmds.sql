@@ -23,5 +23,5 @@ go
 select count(*) from #dblib0024 -- order by i
 go
 select count(*) from sysusers
-select name from sysobjects
+select name from sysobjects compute count(name)
 go

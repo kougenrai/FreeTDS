@@ -29,16 +29,12 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef FREETDS_READPASSPHRASE_H_
-#define FREETDS_READPASSPHRASE_H_
-
-#ifdef HAVE_READPASSPHRASE
-
-# include <readpassphrase.h>
-
-#else /* !HAVE_READPASSPHRASE */
+#ifndef _READPASSPHRASE_H_
+#define _READPASSPHRASE_H_
 
 #include <freetds/pushvis.h>
+
+#ifndef HAVE_READPASSPHRASE
 
 #define RPP_ECHO_OFF    0x00		/* Turn off echo (default). */
 #define RPP_ECHO_ON     0x01		/* Leave echo on. */
@@ -48,12 +44,10 @@
 #define RPP_SEVENBIT    0x10		/* Strip the high bit from input. */
 #define RPP_STDIN       0x20		/* Read from stdin, not /dev/tty */
 
-#undef readpassphrase
-char * tds_readpassphrase(const char *, char *, size_t, int);
-#define readpassphrase tds_readpassphrase
+char * readpassphrase(const char *, char *, size_t, int);
+
+#endif /* HAVE_READPASSPHRASE */
 
 #include <freetds/popvis.h>
 
-#endif /* !HAVE_READPASSPHRASE */
-
-#endif /* !FREETDS_READPASSPHRASE_H_ */
+#endif /* !_READPASSPHRASE_H_ */

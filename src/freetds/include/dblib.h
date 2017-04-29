@@ -30,6 +30,8 @@ extern "C"
 #endif
 #endif
 
+/* $Id: dblib.h,v 1.49 2011-12-05 02:26:31 jklowden Exp $ */
+
 typedef enum tag_DB_RESULT_STATE {
 	  _DB_RES_INIT
 	, _DB_RES_RESULTSET_EMPTY
@@ -59,7 +61,7 @@ typedef struct tag_DBPROC_ROWBUF
 typedef struct
 {
 	int host_column;
-	TDS_SERVER_TYPE datatype;
+	int datatype;
 	int prefix_len;
 	DBINT column_len;
 	BYTE *terminator;
@@ -68,7 +70,7 @@ typedef struct
 	int column_error;
 } BCP_HOSTCOLINFO;
 
-typedef struct
+typedef struct 
 {
 	TDS_CHAR *hostfile;
 	TDS_CHAR *errorfile;
@@ -89,7 +91,7 @@ typedef struct _DBREMOTE_PROC_PARAM
 
 	char *name;
 	BYTE status;
-	TDS_SERVER_TYPE type;
+	int type;
 	DBINT maxlen;
 	DBINT datalen;
 	BYTE *value;
@@ -104,12 +106,15 @@ typedef struct _DBREMOTE_PROC
 	DBREMOTE_PROC_PARAM *param_list;
 } DBREMOTE_PROC;
 
-typedef struct dboption
+#define MAXOPTTEXT    32
+
+struct dboption
 {
-	const char *text;
+	char text[MAXOPTTEXT];
 	DBSTRING *param;
 	DBBOOL factive;
-} DBOPTION;
+};
+typedef struct dboption DBOPTION;
 
 typedef struct _null_representation
 {
@@ -147,7 +152,7 @@ struct tds_dblib_dbprocess
 	FILE *ftos;
 	DB_DBCHKINTR_FUNC chkintr;
 	DB_DBHNDLINTR_FUNC hndlintr;
-
+	
 	/** boolean use ms behaviour */
 	int msdblib;
 
@@ -157,22 +162,14 @@ struct tds_dblib_dbprocess
 	NULLREP		nullreps[MAXBINDTYPES];
 };
 
-enum {
-#if MSDBLIB
-	dblib_msdblib = 1
-#else
-	dblib_msdblib = 0
-#endif
-};
-
 /*
  * internal prototypes
  */
 RETCODE dbgetnull(DBPROCESS *dbproc, int bindtype, int varlen, BYTE* varaddr);
-void copy_data_to_host_var(DBPROCESS * dbproc, TDS_SERVER_TYPE srctype, const BYTE * src, DBINT srclen,
-			   BYTE * dest, DBINT destlen,
-			   int bindtype, DBINT *indicator);
-
+void copy_data_to_host_var(DBPROCESS * dbproc, int srctype, const BYTE * src, DBINT srclen, 
+				BYTE * dest, DBINT destlen,
+				int bindtype, DBINT *indicator);
+				
 int dbperror (DBPROCESS *dbproc, DBINT msgno, long errnum, ...);
 int _dblib_handle_info_message(const TDSCONTEXT * ctxptr, TDSSOCKET * tdsptr, TDSMESSAGE* msgptr);
 int _dblib_handle_err_message(const TDSCONTEXT * ctxptr, TDSSOCKET * tdsptr, TDSMESSAGE* msgptr);
@@ -196,7 +193,7 @@ extern EHANDLEFUNC _dblib_err_handler;
 #define DBPERROR_RETURN(x, msg)	if (x) { dbperror(dbproc, (msg), 0); return FAIL; }
 #define DBPERROR_RETURN3(x, msg, a, b, c)	if (x) { dbperror(dbproc, (msg), 0, a, b, c); return FAIL; }
 #define CHECK_CONN(ret) do { CHECK_PARAMETER(dbproc, SYBENULL, (ret)); \
-	if (IS_TDSDEAD(dbproc->tds_socket)) { dbperror(dbproc, SYBEDDNE, 0); return (ret); } } while(0)
+	if (IS_TDSDEAD(dbproc->tds_socket)) { dbperror(NULL, SYBEDDNE, 0); return (ret); } } while(0)
 
 
 #ifdef __cplusplus

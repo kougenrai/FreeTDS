@@ -70,11 +70,9 @@ static TDS_INT tds_convert_int4(const TDS_INT* src, int desttype, CONV_RESULT * 
 static TDS_INT tds_convert_uint4(const TDS_UINT * src, int desttype, CONV_RESULT * cr);
 static TDS_INT tds_convert_int8(const TDS_INT8 * src, int desttype, CONV_RESULT * cr);
 static TDS_INT tds_convert_uint8(const TDS_UINT8 * src, int desttype, CONV_RESULT * cr);
-static int string_to_datetime(const char *datestr, TDS_UINT len, int desttype, CONV_RESULT * cr);
-static bool is_dd_mon_yyyy(char *t);
+static int string_to_datetime(const char *datestr, int desttype, CONV_RESULT * cr);
+static int is_dd_mon_yyyy(char *t);
 static int store_dd_mon_yyy_date(char *datestr, struct tds_time *t);
-static const char *parse_numeric(const char *buf, const char *pend,
-	bool * p_negative, size_t *p_digits, size_t *p_decimals);
 
 #define test_alloc(x) {if ((x)==NULL) return TDS_CONVERT_NOMEM;}
 
@@ -100,8 +98,6 @@ static const char *parse_numeric(const char *buf, const char *pend,
 #define IS_UINT8(x) (0 <= (x) && (x) <= TDS_UINT8_MAX)
 
 #define TDS_ISDIGIT(c) ((c) >= '0' && (c) <= '9')
-
-#define BIGDATETIME_BIAS 693961
 
 /**
  * \ingroup libtds
@@ -139,19 +135,19 @@ static int store_mday(const char *, struct tds_time *);
 static int store_year(int, struct tds_time *);
 
 /* static int days_this_year (int years); */
-static bool is_timeformat(const char *);
-static bool is_numeric(const char *);
-static bool is_alphabetic(const char *);
-static bool is_ampm(const char *);
+static int is_timeformat(const char *);
+static int is_numeric(const char *);
+static int is_alphabetic(const char *);
+static int is_ampm(const char *);
 #define is_monthname(s) (store_monthname(s, NULL) >= 0)
-static bool is_numeric_dateformat(const char *);
+static int is_numeric_dateformat(const char *);
 
 #if 0
 static TDS_UINT utf16len(const utf16_t * s);
 static const char *tds_prtype(int token);
 #endif
 
-const char tds_hex_digits[] = "0123456789abcdef";
+const char tds_hex_digits[16] = "0123456789abcdef";
 
 /**
  * Copy a terminated string to result and return len or TDS_CONVERT_NOMEM
@@ -162,7 +158,7 @@ string_to_result(int desttype, const char *s, CONV_RESULT * cr)
 	size_t len = strlen(s);
 
 	if (desttype != TDS_CONVERT_CHAR) {
-		cr->c = tds_new(TDS_CHAR, len + 1);
+		cr->c = (TDS_CHAR *) malloc(len + 1);
 		test_alloc(cr->c);
 		memcpy(cr->c, s, len + 1);
 	} else {
@@ -181,7 +177,7 @@ static TDS_INT
 binary_to_result(int desttype, const void *data, size_t len, CONV_RESULT * cr)
 {
 	if (desttype != TDS_CONVERT_BINARY) {
-		cr->ib = tds_new(TDS_CHAR, len);
+		cr->ib = (TDS_CHAR *) malloc(len);
 		test_alloc(cr->ib);
 		memcpy(cr->ib, data, len);
 	} else {
@@ -190,11 +186,13 @@ binary_to_result(int desttype, const void *data, size_t len, CONV_RESULT * cr)
 	return (TDS_INT)len;
 }
 
+#define binary_to_result(data, len, cr) \
+	binary_to_result(desttype, data, len, cr)
+
 #define CASE_ALL_CHAR \
 	SYBCHAR: case SYBVARCHAR: case SYBTEXT: case XSYBCHAR: case XSYBVARCHAR
 #define CASE_ALL_BINARY \
-	SYBBINARY: case SYBVARBINARY: case SYBIMAGE: case XSYBBINARY: case XSYBVARBINARY: \
-	case SYBLONGBINARY: case TDS_CONVERT_BINARY
+	SYBBINARY: case SYBVARBINARY: case SYBIMAGE: case XSYBBINARY: case XSYBVARBINARY: case TDS_CONVERT_BINARY
 
 /* TODO implement me */
 /*
@@ -238,7 +236,7 @@ tds_convert_binary(const TDS_UCHAR * src, TDS_INT srclen, int desttype, CONV_RES
 
 		/* 2 * source length + 1 for terminator */
 
-		cr->c = tds_new(TDS_CHAR, (srclen * 2) + 1);
+		cr->c = (TDS_CHAR *) malloc((srclen * 2) + 1);
 		test_alloc(cr->c);
 
 		c = cr->c;
@@ -250,6 +248,9 @@ tds_convert_binary(const TDS_UCHAR * src, TDS_INT srclen, int desttype, CONV_RES
 
 		*c = '\0';
 		return (srclen * 2);
+		break;
+	case CASE_ALL_BINARY:
+		return binary_to_result(src, srclen, cr);
 		break;
 	case SYBINT1:
 	case SYBUINT1:
@@ -337,13 +338,14 @@ tds_convert_char(const TDS_CHAR * src, TDS_UINT srclen, int desttype, CONV_RESUL
 	TDS_INT8 mymoney;
 	char mynumber[28];
 
+	const char *ptr, *pend;
+	int point_found;
+	unsigned int places;
 	TDS_INT tds_i;
 	TDS_INT8 tds_i8;
 	TDS_UINT8 tds_ui8;
 	TDS_INT rc;
-
-	bool negative;
-	size_t digits, decimals;
+	TDS_CHAR *ib;
 
 	switch (desttype) {
 	case TDS_CONVERT_CHAR:
@@ -351,13 +353,38 @@ tds_convert_char(const TDS_CHAR * src, TDS_UINT srclen, int desttype, CONV_RESUL
 		return srclen;
 
 	case CASE_ALL_CHAR:
-		cr->c = tds_new(TDS_CHAR, srclen + 1);
+		cr->c = (TDS_CHAR *) malloc(srclen + 1);
 		test_alloc(cr->c);
 		memcpy(cr->c, src, srclen);
 		cr->c[srclen] = 0;
 		return srclen;
 		break;
 
+	case CASE_ALL_BINARY:
+
+		/* skip leading "0x" or "0X" */
+
+		if (srclen >= 2 && src[0] == '0' && (src[1] == 'x' || src[1] == 'X')) {
+			src += 2;
+			srclen -= 2;
+		}
+
+		/* ignore trailing blanks and nulls */
+		/* FIXME is good to ignore null ?? */
+		while (srclen > 0 && (src[srclen - 1] == ' ' || src[srclen - 1] == '\0'))
+			--srclen;
+
+		/* a binary string output will be half the length of */
+		/* the string which represents it in hexadecimal     */
+
+		ib = cr->cb.ib;
+		if (desttype != TDS_CONVERT_BINARY) {
+			cr->ib = (TDS_CHAR *) malloc((srclen + 2u) / 2u);
+			test_alloc(cr->ib);
+			ib = cr->ib;
+		}
+		return tds_char2hex(ib, desttype == TDS_CONVERT_BINARY ? cr->cb.len : 0xffffffffu, src, srclen);
+		break;
 	case SYBINT1:
 	case SYBUINT1:
 		if ((rc = string_to_int(src, src + srclen, &tds_i)) < 0)
@@ -431,21 +458,51 @@ tds_convert_char(const TDS_CHAR * src, TDS_UINT srclen, int desttype, CONV_RESUL
 	case SYBMONEY:
 	case SYBMONEY4:
 
-		src = parse_numeric(src, src + srclen, &negative, &digits, &decimals);
-		if (!src)
-			return TDS_CONVERT_SYNTAX;
-		if (digits > 18)
-			return TDS_CONVERT_OVERFLOW;
-
+		/* TODO code similar to string_to_numeric... */
 		i = 0;
-		if (negative)
+		places = 0;
+		point_found = 0;
+		pend = src + srclen;
+
+		/* skip leading blanks */
+		for (ptr = src; ptr != pend && *ptr == ' '; ++ptr)
+			continue;
+
+		/* handle sign */
+		switch (ptr != pend ? *ptr : 0) {
+		case '-':
 			mynumber[i++] = '-';
-		for (; digits; --digits)
-			mynumber[i++] = *src++;
-		src++;
-		for (digits = 0; digits < 4 && digits < decimals; ++digits)
-			mynumber[i++] = *src++;
-		for (; digits < 4; ++digits)
+			/* fall through */
+		case '+':
+			while (++ptr != pend && *ptr == ' ')
+				continue;
+			break;
+		}
+
+		/* handle numbers which start with a lot of '0' */
+		while (ptr != pend && *ptr == '0')
+			++ptr;
+
+		for (; ptr != pend; ptr++) {	/* deal with the rest */
+			if (TDS_ISDIGIT(*ptr)) {	/* it's a number */
+				/* no more than 4 decimal digits */
+				if (places < 4)
+					mynumber[i++] = *ptr;
+				/* assure not buffer overflow */
+				if (i > 22)
+					return TDS_CONVERT_OVERFLOW;
+				if (point_found) {	/* if we passed a decimal point */
+					/* count digits after that point  */
+					++places;
+				}
+			} else if (*ptr == '.') {	/* found a decimal point */
+				if (point_found)	/* already had one. error */
+					return TDS_CONVERT_SYNTAX;
+				point_found = 1;
+			} else	/* first invalid character */
+				return TDS_CONVERT_SYNTAX;	/* lose the rest.          */
+		}
+		for (; places < 4; ++places)
 			mynumber[i++] = '0';
 
 		/* convert number and check for overflow */
@@ -468,11 +525,8 @@ tds_convert_char(const TDS_CHAR * src, TDS_UINT srclen, int desttype, CONV_RESUL
 	case SYBMSDATE:
 	case SYBMSDATETIME2:
 	case SYBMSDATETIMEOFFSET:
-	case SYBTIME:
-	case SYBDATE:
-	case SYB5BIGTIME:
-	case SYB5BIGDATETIME:
-		return string_to_datetime(src, srclen, desttype, cr);
+		/* FIXME not null terminated */
+		return string_to_datetime(src, desttype, cr);
 		break;
 	case SYBNUMERIC:
 	case SYBDECIMAL:
@@ -560,30 +614,50 @@ tds_convert_char(const TDS_CHAR * src, TDS_UINT srclen, int desttype, CONV_RESUL
 static TDS_INT
 tds_convert_bit(const TDS_CHAR * src, int desttype, CONV_RESULT * cr)
 {
+	switch (desttype) {
+	case CASE_ALL_BINARY:
+		return binary_to_result(src, 1, cr);
+	}
 	return tds_convert_int(src[0] ? 1 : 0, desttype, cr);
 }
 
 static TDS_INT
 tds_convert_int1(const TDS_TINYINT * src, int desttype, CONV_RESULT * cr)
 {
+	switch (desttype) {
+	case CASE_ALL_BINARY:
+		return binary_to_result(src, 1, cr);
+	}
 	return tds_convert_int(*src, desttype, cr);
 }
 
 static TDS_INT
 tds_convert_int2(const TDS_SMALLINT * src, int desttype, CONV_RESULT * cr)
 {
+	switch (desttype) {
+	case CASE_ALL_BINARY:
+		return binary_to_result(src, 2, cr);
+	}
 	return tds_convert_int(*src, desttype, cr);
 }
 
 static TDS_INT
 tds_convert_uint2(const TDS_USMALLINT * src, int desttype, CONV_RESULT * cr)
 {
+	switch (desttype) {
+	case CASE_ALL_BINARY:
+		return binary_to_result(src, 2, cr);
+	}
 	return tds_convert_int(*src, desttype, cr);
 }
 
 static TDS_INT
 tds_convert_int4(const TDS_INT * src, int desttype, CONV_RESULT * cr)
 {
+	switch (desttype) {
+	case CASE_ALL_BINARY:
+		return binary_to_result(src, 4, cr);
+	}
 	return tds_convert_int(*src, desttype, cr);
 }
 
@@ -591,6 +665,11 @@ static TDS_INT
 tds_convert_uint4(const TDS_UINT * src, int desttype, CONV_RESULT * cr)
 {
 	TDS_UINT8 num;
+
+	switch (desttype) {
+	case CASE_ALL_BINARY:
+		return binary_to_result(src, 4, cr);
+	}
 
 	num = *src;
 	return tds_convert_uint8(&num, desttype, cr);
@@ -722,6 +801,11 @@ tds_convert_int8(const TDS_INT8 *src, int desttype, CONV_RESULT * cr)
 	TDS_INT8 buf;
 	TDS_CHAR tmp_str[24];
 
+	switch (desttype) {
+	case CASE_ALL_BINARY:
+		return binary_to_result(src, sizeof(TDS_INT8), cr);
+	}
+
 	memcpy(&buf, src, sizeof(buf));
 	if (IS_INT(buf))
 		return tds_convert_int((TDS_INT) buf, desttype, cr);
@@ -758,8 +842,7 @@ tds_convert_int8(const TDS_INT8 *src, int desttype, CONV_RESULT * cr)
 		break;
 	case SYBBIT:
 	case SYBBITN:
-		/* this cannot be 0 as already tested above */
-		cr->ti = 1;
+		cr->ti = buf ? 1 : 0;
 		return sizeof(TDS_TINYINT);
 		break;
 	case SYBFLT8:
@@ -799,6 +882,11 @@ tds_convert_uint8(const TDS_UINT8 *src, int desttype, CONV_RESULT * cr)
 	TDS_UINT8 buf;
 	TDS_CHAR tmp_str[24];
 
+	switch (desttype) {
+	case CASE_ALL_BINARY:
+		return binary_to_result(src, sizeof(TDS_INT8), cr);
+	}
+
 	memcpy(&buf, src, sizeof(buf));
 	/* IS_INT does not work here due to unsigned/signed conversions */
 	if (buf <= (TDS_UINT8) TDS_INT_MAX)
@@ -836,8 +924,7 @@ tds_convert_uint8(const TDS_UINT8 *src, int desttype, CONV_RESULT * cr)
 		break;
 	case SYBBIT:
 	case SYBBITN:
-		/* this cannot be 0 as already tested above */
-		cr->ti = 1;
+		cr->ti = buf ? 1 : 0;
 		return sizeof(TDS_TINYINT);
 		break;
 	case SYBFLT8:
@@ -882,6 +969,9 @@ tds_convert_numeric(const TDS_NUMERIC * src, int desttype, CONV_RESULT * cr)
 		if (tds_numeric_to_string(src, tmpstr) < 0)
 			return TDS_CONVERT_FAIL;
 		return string_to_result(tmpstr, cr);
+		break;
+	case CASE_ALL_BINARY:
+		return binary_to_result(src, sizeof(TDS_NUMERIC), cr);
 		break;
 	case SYBINT1:
 	case SYBUINT1:
@@ -1078,6 +1168,9 @@ tds_convert_money4(const TDS_MONEY4 * src, int desttype, CONV_RESULT * cr)
 		sprintf(p, "%ld.%02lu", dollars / 100, dollars % 100);
 		return string_to_result(tmp_str, cr);
 		break;
+	case CASE_ALL_BINARY:
+		return binary_to_result(src, sizeof(TDS_MONEY4), cr);
+		break;
 	case SYBINT1:
 	case SYBUINT1:
 		dollars = mny.mny4 / 10000;
@@ -1176,6 +1269,10 @@ tds_convert_money(const TDS_MONEY * src, int desttype, CONV_RESULT * cr)
 	case CASE_ALL_CHAR:
 		s = tds_money_to_string((const TDS_MONEY *) src, tmpstr);
 		return string_to_result(s, cr);
+		break;
+
+	case CASE_ALL_BINARY:
+		return binary_to_result(src, sizeof(TDS_MONEY), cr);
 		break;
 	case SYBINT1:
 	case SYBUINT1:
@@ -1276,17 +1373,18 @@ tds_convert_datetimeall(const TDSCONTEXT * tds_ctx, int srctype, const TDS_DATET
 		             dta->time_prec);
 
 		return string_to_result(whole_date_string, cr);
+	case CASE_ALL_BINARY:
+		/* TODO */
+		break;
 	case SYBDATETIME:
-		if (!IS_INT(dta->date))
-			return TDS_CONVERT_OVERFLOW;
-		cr->dt.dtdays = (TDS_INT) dta->date;
-		cr->dt.dttime = (TDS_INT) ((dta->time * 3u + 50000u) / 100000u);
+		/* TODO check overflow */
+		cr->dt.dtdays = dta->date;
+		cr->dt.dttime = (dta->time * 3u + 50000u) / 100000u;
 		return sizeof(TDS_DATETIME);
 	case SYBDATETIME4:
-		if (!IS_USMALLINT(dta->date))
-			return TDS_CONVERT_OVERFLOW;
-		cr->dt4.days = (TDS_USMALLINT) dta->date;
-		cr->dt4.minutes = (TDS_USMALLINT) ((dta->time + 30u * 10000000u) / (60u * 10000000u));
+		/* TODO check overflow */
+		cr->dt4.days = dta->date;
+		cr->dt4.minutes = (dta->time + 30u * 10000000u) / (60u * 10000000u);
 		return sizeof(TDS_DATETIME4);
 	case SYBMSDATETIMEOFFSET:
 	case SYBMSDATE:
@@ -1294,21 +1392,6 @@ tds_convert_datetimeall(const TDSCONTEXT * tds_ctx, int srctype, const TDS_DATET
 	case SYBMSDATETIME2:
 		cr->dta = *dta;
 		return sizeof(TDS_DATETIMEALL);
-	case SYBDATE:
-		if (!IS_INT(dta->date))
-			return TDS_CONVERT_OVERFLOW;
-		cr->date = (TDS_INT) dta->date;
-		return sizeof(TDS_DATE);
-	case SYBTIME:
-		cr->time = (TDS_INT) ((dta->time * 3u + 50000u) / 100000u);
-		return sizeof(TDS_TIME);
-	case SYB5BIGTIME:
-		cr->bigtime = dta->time / 10u;
-		return sizeof(TDS_UINT8);
-	case SYB5BIGDATETIME:
-		cr->bigtime = dta->time / 10u
-			      + (dta->date + BIGDATETIME_BIAS) * ((TDS_UINT8) 86400u * 1000000u);
-		return sizeof(TDS_UINT8);
 		/* conversions not allowed */
 	case SYBUNIQUE:
 	case SYBBIT:
@@ -1332,7 +1415,7 @@ tds_convert_datetimeall(const TDSCONTEXT * tds_ctx, int srctype, const TDS_DATET
 }
 
 static TDS_INT
-tds_convert_datetime(const TDSCONTEXT * tds_ctx, const TDS_DATETIME * dt, int desttype, unsigned precision, CONV_RESULT * cr)
+tds_convert_datetime(const TDSCONTEXT * tds_ctx, const TDS_DATETIME * dt, int desttype, CONV_RESULT * cr)
 {
 	char whole_date_string[64];
 	TDSDATEREC when;
@@ -1344,27 +1427,22 @@ tds_convert_datetime(const TDSCONTEXT * tds_ctx, const TDS_DATETIME * dt, int de
 		tds_strftime(whole_date_string, sizeof(whole_date_string), tds_ctx->locale->date_fmt, &when, 3);
 
 		return string_to_result(whole_date_string, cr);
+	case CASE_ALL_BINARY:
+		return binary_to_result(dt, sizeof(TDS_DATETIME), cr);
 	case SYBDATETIME:
 		cr->dt = *dt;
 		return sizeof(TDS_DATETIME);
 	case SYBDATETIME4:
-		if (!IS_USMALLINT(dt->dtdays))
-			return TDS_CONVERT_OVERFLOW;
 		cr->dt4.days = dt->dtdays;
 		cr->dt4.minutes = (dt->dttime / 300) / 60;
 		return sizeof(TDS_DATETIME4);
-	case SYBDATE:
-		cr->date = dt->dtdays;
-		return sizeof(TDS_DATE);
-	case SYBTIME:
-		cr->time = dt->dttime;
-		return sizeof(TDS_TIME);
 	case SYBMSDATETIMEOFFSET:
 	case SYBMSDATE:
 	case SYBMSTIME:
 	case SYBMSDATETIME2:
 		memset(&cr->dta, 0, sizeof(cr->dta));
-		cr->dta.time_prec = precision;
+		/* FIXME must be 0 if came from DATETIME4 */
+		cr->dta.time_prec = 3;
 		if (desttype == SYBMSDATETIMEOFFSET)
 			cr->dta.has_offset = 1;
 		if (desttype != SYBMSDATE) {
@@ -1377,13 +1455,6 @@ tds_convert_datetime(const TDSCONTEXT * tds_ctx, const TDS_DATETIME * dt, int de
 			cr->dta.date = dt->dtdays;
 		}
 		return sizeof(TDS_DATETIMEALL);
-	case SYB5BIGTIME:
-		cr->bigtime = ((TDS_UINT8) dt->dttime) * 10000u / 3u;
-		return sizeof(TDS_BIGTIME);
-	case SYB5BIGDATETIME:
-		cr->bigdatetime = ((TDS_UINT8) dt->dttime) * 10000u / 3u
-				  + (dt->dtdays + BIGDATETIME_BIAS) * ((TDS_UINT8) 86400u * 1000000u);
-		return sizeof(TDS_BIGDATETIME);
 		/* conversions not allowed */
 	case SYBUNIQUE:
 	case SYBBIT:
@@ -1411,90 +1482,21 @@ tds_convert_datetime4(const TDSCONTEXT * tds_ctx, const TDS_DATETIME4 * dt4, int
 {
 	TDS_DATETIME dt;
 
-	if (desttype == SYBDATETIME4) {
+	switch (desttype) {
+	case CASE_ALL_BINARY:
+		return binary_to_result(dt4, sizeof(TDS_DATETIME4), cr);
+	case SYBDATETIME4:
 		cr->dt4 = *dt4;
 		return sizeof(TDS_DATETIME4);
+	default:
+		break;
 	}
 
 	/* convert to DATETIME and use tds_convert_datetime */
 	dt.dtdays = dt4->days;
 	dt.dttime = dt4->minutes * (60u * 300u);
-	return tds_convert_datetime(tds_ctx, &dt, desttype, 0, cr);
+	return tds_convert_datetime(tds_ctx, &dt, desttype, cr);
 }
-
-static TDS_INT
-tds_convert_time(const TDSCONTEXT * tds_ctx, const TDS_TIME * time, int desttype, CONV_RESULT * cr)
-{
-	TDS_DATETIME dt;
-
-	if (desttype == SYBTIME) {
-		cr->time = *time;
-		return sizeof(TDS_TIME);
-	}
-
-	/* convert to DATETIME and use tds_convert_datetime */
-	dt.dtdays = 0;
-	dt.dttime = *time;
-	return tds_convert_datetime(tds_ctx, &dt, desttype, 0, cr);
-}
-
-static TDS_INT
-tds_convert_date(const TDSCONTEXT * tds_ctx, const TDS_DATE * date, int desttype, CONV_RESULT * cr)
-{
-	TDS_DATETIME dt;
-
-	if (desttype == SYBDATE) {
-		cr->date = *date;
-		return sizeof(TDS_DATE);
-	}
-
-	/* convert to DATETIME and use tds_convert_datetime */
-	dt.dtdays = *date;
-	dt.dttime = 0;
-	return tds_convert_datetime(tds_ctx, &dt, desttype, 0, cr);
-}
-
-static TDS_INT
-tds_convert_bigtime(const TDSCONTEXT * tds_ctx, const TDS_BIGTIME * bigtime, int desttype, CONV_RESULT * cr)
-{
-	TDS_DATETIMEALL dta;
-
-	if (desttype == SYB5BIGTIME) {
-		cr->bigtime = *bigtime;
-		return sizeof(TDS_BIGTIME);
-	}
-
-	/* convert to DATETIMEALL and use tds_convert_datetimeall */
-	memset(&dta, 0, sizeof(dta));
-	dta.time_prec = 6;
-	dta.has_time = 1;
-	dta.time = *bigtime % ((TDS_UINT8) 86400u * 1000000u) * 10u;
-	return tds_convert_datetimeall(tds_ctx, SYBMSTIME, &dta, desttype, cr);
-}
-
-static TDS_INT
-tds_convert_bigdatetime(const TDSCONTEXT * tds_ctx, const TDS_BIGDATETIME * bigdatetime, int desttype, CONV_RESULT * cr)
-{
-	TDS_DATETIMEALL dta;
-	TDS_UINT8 bdt;
-
-	if (desttype == SYB5BIGDATETIME) {
-		cr->bigdatetime = *bigdatetime;
-		return sizeof(TDS_BIGDATETIME);
-	}
-
-	/* convert to DATETIMEALL and use tds_convert_datetimeall */
-	bdt = *bigdatetime;
-	memset(&dta, 0, sizeof(dta));
-	dta.time_prec = 6;
-	dta.has_time = 1;
-	dta.time = bdt % ((TDS_UINT8) 86400u * 1000000u) * 10u;
-	bdt /= (TDS_UINT8) 86400u * 1000000u;
-	dta.has_date = 1;
-	dta.date = bdt - BIGDATETIME_BIAS;
-	return tds_convert_datetimeall(tds_ctx, SYBMSDATETIME2, &dta, desttype, cr);
-}
-
 
 static TDS_INT
 tds_convert_real(const TDS_REAL* src, int desttype, CONV_RESULT * cr)
@@ -1513,6 +1515,10 @@ tds_convert_real(const TDS_REAL* src, int desttype, CONV_RESULT * cr)
 	case CASE_ALL_CHAR:
 		sprintf(tmp_str, "%.9g", the_value);
 		return string_to_result(tmp_str, cr);
+		break;
+
+	case CASE_ALL_BINARY:
+		return binary_to_result(src, sizeof(TDS_REAL), cr);
 		break;
 	case SYBINT1:
 	case SYBUINT1:
@@ -1623,6 +1629,10 @@ tds_convert_flt8(const TDS_FLOAT* src, int desttype, CONV_RESULT * cr)
 		sprintf(tmp_str, "%.17g", the_value);
 		return string_to_result(tmp_str, cr);
 		break;
+
+	case CASE_ALL_BINARY:
+		return binary_to_result(src, sizeof(TDS_FLOAT), cr);
+		break;
 	case SYBINT1:
 	case SYBUINT1:
 		if (!IS_TINYINT(the_value))
@@ -1728,6 +1738,9 @@ tds_convert_unique(const TDS_CHAR * src, int desttype, CONV_RESULT * cr)
 			u->Data4[0], u->Data4[1], u->Data4[2], u->Data4[3], u->Data4[4], u->Data4[5], u->Data4[6], u->Data4[7]);
 		return string_to_result(buf, cr);
 		break;
+	case CASE_ALL_BINARY:
+		return binary_to_result(src, sizeof(TDS_UNIQUE), cr);
+		break;
 	case SYBUNIQUE:
 		/*
 		 * Here we can copy raw to structure because we adjust
@@ -1760,107 +1773,6 @@ tds_convert_unique(const TDS_CHAR * src, int desttype, CONV_RESULT * cr)
 	return TDS_CONVERT_NOAVAIL;
 }
 
-static TDS_INT
-tds_convert_to_binary(int srctype, const TDS_CHAR * src, TDS_UINT srclen, int desttype, CONV_RESULT * cr)
-{
-	size_t len;
-	TDS_CHAR *ib;
-
-	switch (srctype) {
-	case CASE_ALL_BINARY:
-		len = srclen;
-		break;
-	case SYBBIT:
-	case SYBBITN:
-	case SYBINT1:
-	case SYBUINT1:
-		len = 1;
-		break;
-	case SYBINT2:
-	case SYBUINT2:
-		len = 2;
-		break;
-	case SYBINT4:
-	case SYBUINT4:
-		len = 4;
-		break;
-	case SYBINT8:
-	case SYBUINT8:
-		len = sizeof(TDS_INT8);
-		break;
-	case SYBMONEY4:
-		len = sizeof(TDS_MONEY4);
-		break;
-	case SYBMONEY:
-		len = sizeof(TDS_MONEY);
-		break;
-	case SYBNUMERIC:
-	case SYBDECIMAL:
-		len = sizeof(TDS_NUMERIC);
-		break;
-	case SYBREAL:
-		len = sizeof(TDS_REAL);
-		break;
-	case SYBFLT8:
-		len = sizeof(TDS_FLOAT);
-		break;
-	case SYBDATETIME:
-		len = sizeof(TDS_DATETIME);
-		break;
-	case SYBDATETIME4:
-		len = sizeof(TDS_DATETIME4);
-		break;
-	case SYBTIME:
-		len = sizeof(TDS_TIME);
-		break;
-	case SYBDATE:
-		len = sizeof(TDS_DATE);
-		break;
-	case SYBMSTIME:
-	case SYBMSDATE:
-	case SYBMSDATETIME2:
-	case SYBMSDATETIMEOFFSET:
-		len = sizeof(TDS_DATETIMEALL);
-		break;
-	case SYB5BIGTIME:
-		len = sizeof(TDS_BIGTIME);
-		break;
-	case SYB5BIGDATETIME:
-		len = sizeof(TDS_BIGDATETIME);
-		break;
-	case SYBUNIQUE:
-		len = sizeof(TDS_UNIQUE);
-		break;
-	case CASE_ALL_CHAR:
-
-		/* skip leading "0x" or "0X" */
-		if (srclen >= 2 && src[0] == '0' && (src[1] == 'x' || src[1] == 'X')) {
-			src += 2;
-			srclen -= 2;
-		}
-
-		/* ignore trailing blanks and nulls */
-		/* FIXME is good to ignore null ?? */
-		while (srclen > 0 && (src[srclen - 1] == ' ' || src[srclen - 1] == '\0'))
-			--srclen;
-
-		/* a binary string output will be half the length of */
-		/* the string which represents it in hexadecimal     */
-
-		ib = cr->cb.ib;
-		if (desttype != TDS_CONVERT_BINARY) {
-			cr->ib = tds_new(TDS_CHAR, (srclen + 2u) / 2u);
-			test_alloc(cr->ib);
-			ib = cr->ib;
-		}
-		return tds_char2hex(ib, desttype == TDS_CONVERT_BINARY ? cr->cb.len : 0xffffffffu, src, srclen);
-
-	default:
-		return TDS_CONVERT_NOAVAIL;
-	}
-	return binary_to_result(desttype, src, len, cr);
-}
-
 /**
  * tds_convert
  * convert a type to another.
@@ -1890,11 +1802,6 @@ tds_convert(const TDSCONTEXT * tds_ctx, int srctype, const TDS_CHAR * src, TDS_U
 		srctype = v->type;
 		src = v->data;
 		srclen = v->data_len;
-	}
-
-	switch (desttype) {
-	case CASE_ALL_BINARY:
-		return tds_convert_to_binary(srctype, src, srclen, desttype, cr);
 	}
 
 	switch (srctype) {
@@ -1950,23 +1857,12 @@ tds_convert(const TDSCONTEXT * tds_ctx, int srctype, const TDS_CHAR * src, TDS_U
 		length = tds_convert_datetimeall(tds_ctx, srctype, (const TDS_DATETIMEALL *) src, desttype, cr);
 		break;
 	case SYBDATETIME:
-		length = tds_convert_datetime(tds_ctx, (const TDS_DATETIME* ) src, desttype, 3, cr);
+		length = tds_convert_datetime(tds_ctx, (const TDS_DATETIME* ) src, desttype, cr);
 		break;
 	case SYBDATETIME4:
 		length = tds_convert_datetime4(tds_ctx, (const TDS_DATETIME4* ) src, desttype, cr);
 		break;
-	case SYBTIME:
-		length = tds_convert_time(tds_ctx, (const TDS_TIME *) src, desttype, cr);
-		break;
-	case SYBDATE:
-		length = tds_convert_date(tds_ctx, (const TDS_DATE *) src, desttype, cr);
-		break;
-	case SYB5BIGTIME:
-		length = tds_convert_bigtime(tds_ctx, (const TDS_BIGTIME *) src, desttype, cr);
-		break;
-	case SYB5BIGDATETIME:
-		length = tds_convert_bigdatetime(tds_ctx, (const TDS_BIGDATETIME *) src, desttype, cr);
-		break;
+	case SYBLONGBINARY:
 	case CASE_ALL_BINARY:
 		length = tds_convert_binary((const TDS_UCHAR *) src, srclen, desttype, cr);
 		break;
@@ -1990,7 +1886,7 @@ tds_convert(const TDSCONTEXT * tds_ctx, int srctype, const TDS_CHAR * src, TDS_U
 }
 
 static int
-string_to_datetime(const char *instr, TDS_UINT len, int desttype, CONV_RESULT * cr)
+string_to_datetime(const char *instr, int desttype, CONV_RESULT * cr)
 {
 	enum states
 	{ GOING_IN_BLIND,
@@ -2018,8 +1914,9 @@ string_to_datetime(const char *instr, TDS_UINT len, int desttype, CONV_RESULT * 
 	memset(&t, '\0', sizeof(t));
 	t.tm_mday = 1;
 
-	in = tds_strndup(instr, len);
+	in = (char *) malloc(strlen(instr) + 1);
 	test_alloc(in);
+	strcpy(in, instr);
 
 	tok = strtok_r(in, " ,", &lasts);
 
@@ -2221,35 +2118,17 @@ string_to_datetime(const char *instr, TDS_UINT len, int desttype, CONV_RESULT * 
 
 	free(in);
 
-	if (desttype == SYBDATE) {
-		cr->date = dt_days;
-		return sizeof(TDS_DATE);
-	}
-	dt_time = t.tm_hour * 60 + t.tm_min;
 	/* TODO check for overflow */
-	if (desttype == SYBDATETIME4) {
-		cr->dt4.days = dt_days;
-		cr->dt4.minutes = dt_time;
-		return sizeof(TDS_DATETIME4);
-	}
-	dt_time = dt_time * 60 + t.tm_sec;
 	if (desttype == SYBDATETIME) {
 		cr->dt.dtdays = dt_days;
+		dt_time = (t.tm_hour * 60 + t.tm_min) * 60 + t.tm_sec;
 		cr->dt.dttime = dt_time * 300 + (t.tm_ns / 1000000u * 300 + 150) / 1000;
 		return sizeof(TDS_DATETIME);
 	}
-	if (desttype == SYBTIME) {
-		cr->time = dt_time * 300 + (t.tm_ns / 1000000u * 300 + 150) / 1000;
-		return sizeof(TDS_TIME);
-	}
-	if (desttype == SYB5BIGTIME) {
-		cr->bigtime = dt_time * (TDS_UINT8) 1000000u + t.tm_ns / 1000u;
-		return sizeof(TDS_BIGTIME);
-	}
-	if (desttype == SYB5BIGDATETIME) {
-		cr->bigdatetime = (dt_days + BIGDATETIME_BIAS) * ((TDS_UINT8) 86400u * 1000000u)
-				  + dt_time * (TDS_UINT8) 1000000u + t.tm_ns / 1000u;
-		return sizeof(TDS_BIGDATETIME);
+	if (desttype == SYBDATETIME4) {
+		cr->dt4.days = dt_days;
+		cr->dt4.minutes = t.tm_hour * 60 + t.tm_min;
+		return sizeof(TDS_DATETIME4);
 	}
 
 	cr->dta.has_offset = 0;
@@ -2258,6 +2137,7 @@ string_to_datetime(const char *instr, TDS_UINT len, int desttype, CONV_RESULT * 
 	cr->dta.date = dt_days;
 	cr->dta.has_time = 1;
 	cr->dta.time_prec = 7; /* TODO correct value */
+	dt_time = (t.tm_hour * 60 + t.tm_min) * 60 + t.tm_sec;
 	cr->dta.time = ((TDS_UINT8) dt_time) * 10000000u + t.tm_ns / 100u;
 	return sizeof(TDS_DATETIMEALL);
 }
@@ -2277,13 +2157,13 @@ string_to_numeric(const char *instr, const char *pend, CONV_RESULT * cr)
 	TDS_UINT packed_num[(MAXPRECISION + 7) / 8];
 
 	char *ptr;
+	const char *pstr;
+	int old_digits_left, digits_left, digit_found = 0;
 
 	int i = 0;
 	int j = 0;
-	int bytes;
-
-	bool negative;
-	size_t digits, decimals;
+	int bytes, places;
+	unsigned char sign;
 
 	/* FIXME: application can pass invalid value for precision and scale ?? */
 	if (cr->n.precision > MAXPRECISION)
@@ -2295,13 +2175,30 @@ string_to_numeric(const char *instr, const char *pend, CONV_RESULT * cr)
 	if (cr->n.scale > cr->n.precision)
 		return TDS_CONVERT_FAIL;
 
-	instr = parse_numeric(instr, pend, &negative, &digits, &decimals);
-	if (!instr)
-		return TDS_CONVERT_SYNTAX;
 
-	cr->n.array[0] = negative ? 1 : 0;
+	/* skip leading blanks */
+	for (pstr = instr;; ++pstr) {
+		if (pstr == pend)
+			return TDS_CONVERT_SYNTAX;
+		if (*pstr != ' ')
+			break;
+	}
 
-	/* translate a number like 000ddddd.ffff to 00000000dddddffff00 */
+	sign = 0;
+	if (*pstr == '-' || *pstr == '+') {	/* deal with a leading sign */
+		if (*pstr == '-')
+			sign = 1;
+		pstr++;
+	}
+	cr->n.array[0] = sign;
+
+	/* 
+	 * skip leading zeroes 
+	 * Not skipping them cause numbers like "000000000000" to 
+	 * appear like overflow
+	 */
+	for (; pstr != pend && *pstr == '0'; ++pstr)
+		digit_found = 1;
 
 	/* 
 	 * Having disposed of any sign and leading blanks, 
@@ -2313,23 +2210,47 @@ string_to_numeric(const char *instr, const char *pend, CONV_RESULT * cr)
 	for (i = 0; i < 8; ++i)
 		*ptr++ = '0';
 
+	places = 0;
+	old_digits_left = 0;
+	digits_left = cr->n.precision - cr->n.scale;
+
+	for (; pstr != pend; ++pstr) {			/* deal with the rest */
+		if (*pstr >= '0' && *pstr <= '9') {	/* it's a number */
+			/* copy digit to destination */
+			if (--digits_left >= 0)
+				*ptr++ = *pstr;
+			digit_found = 1;
+		} else if (*pstr == '.') {			/* found a decimal point */
+			if (places)				/* found a decimal point previously: return error */
+				return TDS_CONVERT_SYNTAX;
+			old_digits_left = digits_left;
+			digits_left = cr->n.scale;
+			places = 1;
+		} else if (*pstr == ' ') {
+			for (; pstr != pend && *pstr == ' '; ++pstr) ; /* skip contiguous blanks */
+			if (pstr == pend)
+				break;				/* success: found only trailing blanks */
+			return TDS_CONVERT_SYNTAX;		/* bzzt: found something after the blank(s) */
+		} else {         				/* first invalid character */
+			return TDS_CONVERT_SYNTAX;
+		}
+	}
+	/* no digits? no number! */
+	if (!digit_found)
+		return TDS_CONVERT_SYNTAX;
+
+	if (!places) {
+		old_digits_left = digits_left;
+		digits_left = cr->n.scale;
+	}
+
 	/* too many digits, error */
-	if (cr->n.precision - cr->n.scale < digits)
+	if (old_digits_left < 0)
 		return TDS_CONVERT_OVERFLOW;
 
-	/* copy digits before the dot */
-	memcpy(ptr, instr, digits);
-	ptr += digits;
-	instr += digits + 1;
-
-	/* copy digits after the dot */
-	if (decimals > cr->n.scale)
-		decimals = cr->n.scale;
-	memcpy(ptr, instr, decimals);
-
 	/* fill up decimal digits */
-	memset(ptr + decimals, '0', cr->n.scale - decimals);
-	ptr += cr->n.scale;
+	while (--digits_left >= 0)
+		*ptr++ = '0';
 
 	/*
 	 * Packaged number explanation: 
@@ -2345,7 +2266,7 @@ string_to_numeric(const char *instr, const char *pend, CONV_RESULT * cr)
 		TDS_UINT n = *ptr++;
 
 		for (i = 1; i < 8; ++i)
-			n = n * 10u + *ptr++;
+			n = n * 10 + *ptr++;
 		/* fix packet number and store */
 		packed_num[++j] = n - ((TDS_UINT) '0' * 11111111lu);
 		ptr -= 16;
@@ -2357,7 +2278,7 @@ string_to_numeric(const char *instr, const char *pend, CONV_RESULT * cr)
 		--j;
 
 	for (;;) {
-		bool is_zero = true;
+		char is_zero = 1;
 		TDS_UINT carry = 0;
 		i = j;
 		if (!packed_num[j])
@@ -2365,7 +2286,7 @@ string_to_numeric(const char *instr, const char *pend, CONV_RESULT * cr)
 		do {
 			TDS_UINT tmp = packed_num[i];
 			if (tmp)
-				is_zero = false;
+				is_zero = 0;
 
 			/* divide for 256 for find another byte */
 			/*
@@ -2388,19 +2309,21 @@ string_to_numeric(const char *instr, const char *pend, CONV_RESULT * cr)
 	return sizeof(TDS_NUMERIC);
 }
 
-static bool
+static int
 is_numeric_dateformat(const char *t)
 {
 	const char *instr;
+	int ret = 1;
 	int slashes = 0;
 	int hyphens = 0;
 	int periods = 0;
 	int digits = 0;
 
 	for (instr = t; *instr; instr++) {
-		if (!isdigit((unsigned char) *instr) && *instr != '/' && *instr != '-' && *instr != '.')
-			return false;
-
+		if (!isdigit((unsigned char) *instr) && *instr != '/' && *instr != '-' && *instr != '.') {
+			ret = 0;
+			break;
+		}
 		if (*instr == '/')
 			slashes++;
 		else if (*instr == '-')
@@ -2412,14 +2335,14 @@ is_numeric_dateformat(const char *t)
 
 	}
 	if (hyphens + slashes + periods != 2)
-		return false;
+		ret = 0;
 	if (hyphens == 1 || slashes == 1 || periods == 1)
-		return false;
+		ret = 0;
 
 	if (digits < 4 || digits > 8)
-		return false;
+		ret = 0;
 
-	return true;
+	return (ret);
 
 }
 
@@ -2429,7 +2352,7 @@ is_numeric_dateformat(const char *t)
 /*    DD-MON-YY   */
 /*    DDMONYY     */
 /*    DDMONYYYY   */
-static bool
+static int
 is_dd_mon_yyyy(char *t)
 {
 	char *instr;
@@ -2438,127 +2361,138 @@ is_dd_mon_yyyy(char *t)
 	instr = t;
 
 	if (!isdigit((unsigned char) *instr))
-		return false;
+		return (0);
 
 	instr++;
 
 	if (!isdigit((unsigned char) *instr))
-		return false;
+		return (0);
 
 	instr++;
 
 	if (*instr == '-') {
 		instr++;
 
-		strlcpy(month, instr, 4);
+		strncpy(month, instr, 3);
+		month[3] = '\0';
 
 		if (!is_monthname(month))
-			return false;
+			return (0);
 
 		instr += 3;
 
 		if (*instr != '-')
-			return false;
+			return (0);
 
 		instr++;
 		if (!isdigit((unsigned char) *instr))
-			return false;
+			return (0);
 
 		instr++;
 		if (!isdigit((unsigned char) *instr))
-			return false;
+			return (0);
 
 		instr++;
 
 		if (*instr) {
 			if (!isdigit((unsigned char) *instr))
-				return false;
+				return (0);
 
 			instr++;
 			if (!isdigit((unsigned char) *instr))
-				return false;
+				return (0);
 		}
 
 	} else {
 
-		strlcpy(month, instr, 4);
+		strncpy(month, instr, 3);
+		month[3] = '\0';
 
 		if (!is_monthname(month))
-			return false;
+			return (0);
 
 		instr += 3;
 
 		if (!isdigit((unsigned char) *instr))
-			return false;
+			return (0);
 
 		instr++;
 		if (!isdigit((unsigned char) *instr))
-			return false;
+			return (0);
 
 		instr++;
 		if (*instr) {
 			if (!isdigit((unsigned char) *instr))
-				return false;
+				return (0);
 
 			instr++;
 			if (!isdigit((unsigned char) *instr))
-				return false;
+				return (0);
 		}
 	}
 
-	return true;
+	return (1);
 
 }
 
-static bool
+static int
 is_ampm(const char *datestr)
 {
+	int ret = 0;
+
 	if (strcasecmp(datestr, "am") == 0)
-		return true;
+		ret = 1;
+	else if (strcasecmp(datestr, "pm") == 0)
+		ret = 1;
+	else
+		ret = 0;
 
-	if (strcasecmp(datestr, "pm") == 0)
-		return true;
-
-	return false;
+	return ret;
 }
 
-static bool
+static int
 is_alphabetic(const char *datestr)
 {
 	const char *s;
+	int ret = 1;
 
 	for (s = datestr; *s; s++) {
 		if (!isalpha((unsigned char) *s))
-			return false;
+			ret = 0;
 	}
-	return true;
+	return (ret);
 }
 
-static bool
+static int
 is_numeric(const char *datestr)
 {
 	const char *s;
+	int ret = 1;
 
 	for (s = datestr; *s; s++) {
 		if (!isdigit((unsigned char) *s))
-			return false;
+			ret = 0;
 	}
-	return true;
+	return (ret);
 }
 
-static bool
+static int
 is_timeformat(const char *datestr)
 {
 	const char *s;
+	int ret = 1;
 
 	for (s = datestr; *s; s++) {
 		if (!isdigit((unsigned char) *s) && *s != ':' && *s != '.')
 			break;
 	}
-	if (*s)
-		return is_ampm(s);
+	if (*s) {
+		if (strcasecmp(s, "am") != 0 && strcasecmp(s, "pm") != 0)
+			ret = 0;
+	}
 
-	return true;
+
+	return (ret);
 }
 
 static int
@@ -2663,10 +2597,12 @@ store_dd_mon_yyy_date(char *datestr, struct tds_time *t)
 	char dd[3];
 	int mday;
 	char mon[4];
+	char yyyy[5];
 	int year;
 
 	tdsdump_log(TDS_DBG_INFO1, "store_dd_mon_yyy_date: %s\n", datestr);
-	strlcpy(dd, datestr, 3);
+	strncpy(dd, datestr, 2);
+	dd[2] = '\0';
 	mday = atoi(dd);
 
 	if (mday > 0 && mday < 32)
@@ -2675,26 +2611,30 @@ store_dd_mon_yyy_date(char *datestr, struct tds_time *t)
 		return 0;
 
 	if (datestr[2] == '-') {
-		strlcpy(mon, &datestr[3], 4);
+		strncpy(mon, &datestr[3], 3);
+		mon[3] = '\0';
 
 		if (store_monthname(mon, t) < 0) {
 			tdsdump_log(TDS_DBG_INFO1, "store_dd_mon_yyy_date: store_monthname failed\n");
 			return 0;
 		}
 
-		year = atoi(&datestr[7]);
+		strcpy(yyyy, &datestr[7]);
+		year = atoi(yyyy);
 		tdsdump_log(TDS_DBG_INFO1, "store_dd_mon_yyy_date: year %d\n", year);
 
 		return store_year(year, t);
 	} else {
-		strlcpy(mon, &datestr[2], 4);
+		strncpy(mon, &datestr[2], 3);
+		mon[3] = '\0';
 
 		if (store_monthname(mon, t) < 0) {
 			tdsdump_log(TDS_DBG_INFO1, "store_dd_mon_yyy_date: store_monthname failed\n");
 			return 0;
 		}
 
-		year = atoi(&datestr[5]);
+		strcpy(yyyy, &datestr[5]);
+		year = atoi(yyyy);
 		tdsdump_log(TDS_DBG_INFO1, "store_dd_mon_yyy_date: year %d\n", year);
 
 		return store_year(year, t);
@@ -2811,7 +2751,7 @@ store_time(const char *datestr, struct tds_time *t)
 	int state = TDS_HOURS;
 	char last_sep = '\0';
 	const char *s;
-	unsigned int hours = 0, minutes = 0, seconds = 0, nanosecs = 0;
+	int hours = 0, minutes = 0, seconds = 0, nanosecs = 0;
 	int ret = 1;
 	unsigned ns_div = 1;
 
@@ -2824,17 +2764,17 @@ store_time(const char *datestr, struct tds_time *t)
 				ret = 0;
 			switch (state) {
 			case TDS_HOURS:
-				hours = (hours * 10u) + (*s - '0');
+				hours = (hours * 10) + (*s - '0');
 				break;
 			case TDS_MINUTES:
-				minutes = (minutes * 10u) + (*s - '0');
+				minutes = (minutes * 10) + (*s - '0');
 				break;
 			case TDS_SECONDS:
-				seconds = (seconds * 10u) + (*s - '0');
+				seconds = (seconds * 10) + (*s - '0');
 				break;
 			case TDS_FRACTIONS:
 				if (ns_div < 1000000000u) {
-					nanosecs = (nanosecs * 10u) + (*s - '0');
+					nanosecs = (nanosecs * 10) + (*s - '0');
 					ns_div *= 10;
 				}
 				break;
@@ -2851,30 +2791,30 @@ store_time(const char *datestr, struct tds_time *t)
 		if (strcasecmp(s, "pm") == 0) {
 			if (hours == 0)
 				ret = 0;
-			if (hours > 0u && hours < 12u)
+			if (hours > 0 && hours < 12)
 				t->tm_hour = hours + 12;
 			else
 				t->tm_hour = hours;
 		}
 	} else {
-		if (hours < 24u)
+		if (hours >= 0 && hours < 24)
 			t->tm_hour = hours;
 		else
 			ret = 0;
 	}
-	if (minutes < 60u)
+	if (minutes >= 0 && minutes < 60)
 		t->tm_min = minutes;
 	else
 		ret = 0;
-	if (seconds < 60u)
+	if (seconds >= 0 && seconds < 60)
 		t->tm_sec = seconds;
 	else
 		ret = 0;
 	tdsdump_log(TDS_DBG_FUNC, "store_time() nanosecs = %d\n", nanosecs);
 	if (nanosecs) {
-		if (nanosecs < ns_div && last_sep == '.')
+		if (nanosecs >= 0 && nanosecs < ns_div && last_sep == '.')
 			t->tm_ns = nanosecs * (1000000000u / ns_div);
-		else if (nanosecs < 1000u)
+		else if (nanosecs >= 0 && nanosecs < 1000u)
 			t->tm_ns = nanosecs * 1000000u;
 		else
 			ret = 0;
@@ -2915,8 +2855,8 @@ store_hour(const char *hour, const char *ampm, struct tds_time *t)
  * @param srctype type requires
  * @return nullable type
  */
-TDS_SERVER_TYPE
-tds_get_null_type(TDS_SERVER_TYPE srctype)
+TDS_INT
+tds_get_null_type(int srctype)
 {
 
 	switch (srctype) {
@@ -2949,12 +2889,6 @@ tds_get_null_type(TDS_SERVER_TYPE srctype)
 	case SYBMONEY4:
 		return SYBMONEYN;
 		break;
-	case SYBTIME:
-		return SYBTIMEN;
-		break;
-	case SYBDATE:
-		return SYBDATEN;
-		break;
 	default:
 		break;
 	}
@@ -2965,9 +2899,8 @@ tds_get_null_type(TDS_SERVER_TYPE srctype)
  * format a date string according to an "extended" strftime(3) formatting definition.
  * @param buf     output buffer
  * @param maxsize size of buffer in bytes (space include terminator)
- * @param format  format string passed to strftime(3), except that %z represents fraction of seconds.
+ * @param format  format string passed to strftime(3), except that %z represents milliseconds
  * @param dr      date to convert
- * @param prec    second fraction precision (0-7).
  * @return length of string returned, 0 for error
  */
 size_t
@@ -3002,7 +2935,7 @@ tds_strftime(char *buf, size_t maxsize, const char *format, const TDSDATEREC * d
 #endif
 
 	/* more characters are required because we replace %z with up to 7 digits */
-	our_format = tds_new(char, strlen(format) + 1 + 5);
+	our_format = (char*) malloc(strlen(format) + 1 + 5);
 	if (!our_format)
 		return 0;
 
@@ -3021,14 +2954,10 @@ tds_strftime(char *buf, size_t maxsize, const char *format, const TDSDATEREC * d
 	}
 
 	if (pz) {
-		if (prec || pz <= our_format || pz[-1] != '.') {
-			char buf[12];
-			sprintf(buf, "%07d", dr->decimicrosecond);
-			memcpy(pz, buf, prec);
-			strcpy(pz + prec, format + (pz - our_format) + 2);
-		} else {
-			strcpy(pz - 1, format + (pz - our_format) + 2);
-		}
+		char buf[12];
+		sprintf(buf, "%07d", dr->decimicrosecond);
+		memcpy(pz, buf, prec);
+		strcpy(pz + prec, format + (pz - our_format) + 2);
 	}
 
 	length = strftime(buf, maxsize, our_format, &tm);
@@ -3044,13 +2973,10 @@ utf16len(const utf16_t * s)
 {
 	const utf16_t *p = s;
 
-	while (*p++)
-		continue;
+	while (*p++);
 	return p - s;
 }
 #endif
-
-#include "tds_willconvert.h"
 
 /**
  * Test if a conversion is possible
@@ -3061,24 +2987,34 @@ utf16len(const utf16_t * s)
 unsigned char
 tds_willconvert(int srctype, int desttype)
 {
-	TDS_TINYINT cat_from, cat_to;
-	TDS_UINT yn;
+	typedef struct
+	{
+		int srctype;
+		int desttype;
+		int yn;
+	}
+	ANSWER;
+	static const ANSWER answers[] = {
+#	include "tds_willconvert.h"
+	};
+	unsigned int i;
+	const ANSWER *p = NULL;
 
 	tdsdump_log(TDS_DBG_FUNC, "tds_willconvert(%d, %d)\n", srctype, desttype);
 
-	/* they must be from 0 to 255 */
-	if (((srctype|desttype) & ~0xff) != 0)
+	for (i = 0; i < sizeof(answers) / sizeof(ANSWER); i++) {
+		if (srctype == answers[i].srctype && desttype == answers[i].desttype) {
+			tdsdump_log(TDS_DBG_FUNC, "tds_willconvert(%d, %d) returns %s\n", answers[i].srctype, answers[i].desttype,
+				    answers[i].yn? "yes":"no");
+			p =  &answers[i];
+			break;
+		}
+	}
+
+	if (!p)
 		return 0;
-
-	cat_from = type2category[srctype];
-	cat_to   = type2category[desttype];
-	yn = category_conversion[cat_from];
-
-	yn = (yn >> cat_to) & 1;
-
-	tdsdump_log(TDS_DBG_FUNC, "tds_willconvert(%d, %d) returns %s\n",
-		    srctype, desttype, yn? "yes":"no");
-	return yn;
+		
+	return p->yn;
 }
 
 #if 0
@@ -3130,7 +3066,7 @@ tds_datecrack(TDS_INT datetype, const void *di, TDSDATEREC * dr)
 	int dt_days;
 	unsigned int dt_time;
 
-	int years, months, days, ydays, wday, hours, mins, secs, dms, tzone = 0;
+	int years, months, days, ydays, wday, hours, mins, secs, dms;
 	int l, n, i, j;
 
 	memset(dr, 0, sizeof(*dr));
@@ -3145,16 +3081,15 @@ tds_datecrack(TDS_INT datetype, const void *di, TDSDATEREC * dr)
 			dt_time = 0;
 		} else {
 			dms = dta->time % 10000000u;
-			dt_time = (unsigned int) (dta->time / 10000000u);
+			dt_time = dta->time / 10000000u;
 			secs = dt_time % 60;
 			dt_time = dt_time / 60;
 		}
 		if (datetype == SYBMSDATETIMEOFFSET) {
 			--dt_days;
-			dt_time = dt_time + 1440 + dta->offset;
-			dt_days += dt_time / 1440;
-			dt_time %= 1440;
-			tzone = dta->offset;
+			dt_time = dt_time + 86400 + dta->offset;
+			dt_days += dt_time / 86400;
+			dt_time %= 86400;
 		}
 	} else if (datetype == SYBDATETIME) {
 		const TDS_DATETIME *dt = (const TDS_DATETIME *) di;
@@ -3170,36 +3105,8 @@ tds_datecrack(TDS_INT datetype, const void *di, TDSDATEREC * dr)
 		dms = 0;
 		dt_days = dt4->days;
 		dt_time = dt4->minutes;
-	} else if (datetype == SYBDATE) {
-		dt_days = *((const TDS_DATE *) di);
-		dms = 0;
-		secs = 0;
-		dt_time = 0;
-	} else if (datetype == SYBTIME) {
-		dt_time = *((const TDS_TIME *) di);
-		dms = ((dt_time % 300) * 1000 + 150) / 300 * 10000u;
-		dt_time = dt_time / 300;
-		secs = dt_time % 60;
-		dt_time = dt_time / 60;
-		dt_days = 0;
-	} else if (datetype == SYB5BIGTIME) {
-		TDS_UINT8 bigtime = *((const TDS_BIGTIME *) di);
-		dt_days = 0;
-		dms = bigtime % 1000000u * 10u;
-		dt_time = (bigtime / 1000000u) % 86400u;
-		secs = dt_time % 60;
-		dt_time = dt_time / 60u;
-	} else if (datetype == SYB5BIGDATETIME) {
-		TDS_UINT8 bigdatetime = *((const TDS_BIGDATETIME*) di);
-		dms = bigdatetime % 1000000u * 10u;
-		bigdatetime /= 1000000u;
-		secs = bigdatetime % 60u;
-		bigdatetime /= 60u;
-		dt_time = bigdatetime % (24u*60u);
-		dt_days = bigdatetime / (24u*60u) - BIGDATETIME_BIAS;
-	} else {
+	} else
 		return TDS_FAIL;
-	}
 
 	/*
 	 * -53690 is minimun  (1753-1-1) (Gregorian calendar start in 1732) 
@@ -3229,12 +3136,12 @@ tds_datecrack(TDS_INT datetype, const void *di, TDSDATEREC * dr)
 	dr->quarter = months / 3;
 	dr->day = days;
 	dr->dayofyear = ydays;
+	dr->week = -1;
 	dr->weekday = wday;
 	dr->hour = hours;
 	dr->minute = mins;
 	dr->second = secs;
 	dr->decimicrosecond = dms;
-	dr->timezone = tzone;
 	return TDS_SUCCESS;
 }
 
@@ -3254,25 +3161,63 @@ tds_datecrack(TDS_INT datetype, const void *di, TDSDATEREC * dr)
 static TDS_INT
 string_to_int(const char *buf, const char *pend, TDS_INT * res)
 {
-	bool negative;
+	enum
+	{ blank = ' ' };
+	const char *p;
+	int sign;
 	unsigned int num;	/* we use unsigned here for best overflow check */
-	size_t digits, decimals;
 
-	buf = parse_numeric(buf, pend, &negative, &digits, &decimals);
-	if (!buf)
+	p = buf;
+
+	/* ignore leading spaces */
+	while (p != pend && *p == blank)
+		++p;
+	if (p == pend) {
+		*res = 0;
+		return sizeof(TDS_INT);
+	}
+
+	/* check for sign */
+	sign = 0;
+	switch (*p) {
+	case '-':
+		sign = 1;
+		/* fall thru */
+	case '+':
+		/* skip spaces between sign and number */
+		++p;
+		while (p != pend && *p == blank)
+			++p;
+		break;
+	}
+
+	/* a digit must be present */
+	if (p == pend)
 		return TDS_CONVERT_SYNTAX;
 
 	num = 0;
-	for (; digits; --digits, ++buf) {
+	for (; p != pend; ++p) {
+		/* check for trailing spaces */
+		if (*p == blank) {
+			while (++p != pend && *p == blank);
+			if (p != pend)
+				return TDS_CONVERT_SYNTAX;
+			break;
+		}
+
+		/* must be a digit */
+		if (!isdigit((unsigned char) *p))
+			return TDS_CONVERT_SYNTAX;
+
 		/* add a digit to number and check for overflow */
 		/* NOTE I didn't forget a digit, I check overflow before multiply to prevent overflow */
 		if (num > 214748364u)
 			return TDS_CONVERT_OVERFLOW;
-		num = num * 10u + (*buf - '0');
+		num = num * 10u + (*p - '0');
 	}
 
 	/* check for overflow and convert unsigned to signed */
-	if (negative) {
+	if (sign) {
 		if (num > 2147483648u)
 			return TDS_CONVERT_OVERFLOW;
 		*res = 0 - num;
@@ -3291,22 +3236,57 @@ string_to_int(const char *buf, const char *pend, TDS_INT * res)
  * \return TDS_CONVERT_* or failure code on error
  */
 static TDS_INT	/* copied from string_ti_int and modified */
-parse_int8(const char *buf, const char *pend, TDS_UINT8 * res, bool * p_negative)
+parse_int8(const char *buf, const char *pend, TDS_UINT8 * res, int * p_sign)
 {
-	TDS_UINT8 num;
-	size_t digits, decimals;
+	enum
+	{ blank = ' ' };
+	const char *p;
+	TDS_UINT8 num, prev;
 
-	buf = parse_numeric(buf, pend, p_negative, &digits, &decimals);
-	if (!buf)
+	p = buf;
+
+	/* ignore leading spaces */
+	while (p != pend && *p == blank)
+		++p;
+	if (p == pend) {
+		*res = 0;
+		return sizeof(TDS_INT8);
+	}
+
+	/* check for sign */
+	switch (*p) {
+	case '-':
+		*p_sign = 1;
+		/* fall thru */
+	case '+':
+		/* skip spaces between sign and number */
+		++p;
+		while (p != pend && *p == blank)
+			++p;
+		break;
+	}
+
+	/* a digit must be present */
+	if (p == pend)
 		return TDS_CONVERT_SYNTAX;
 
 	num = 0;
-	for (; digits; --digits, ++buf) {
+	for (; p != pend; ++p) {
+		/* check for trailing spaces */
+		if (*p == blank) {
+			while (p != pend && *++p == blank);
+			if (p != pend)
+				return TDS_CONVERT_SYNTAX;
+			break;
+		}
+
+		/* must be a digit */
+		if (!isdigit((unsigned char) *p))
+			return TDS_CONVERT_SYNTAX;
+
 		/* add a digit to number and check for overflow */
-		TDS_UINT8 prev = num;
-		if (num > (((TDS_UINT8) 1u) << 63) / 5u)
-			return TDS_CONVERT_OVERFLOW;
-		num = num * 10u + (*buf - '0');
+		prev = num;
+		num = num * 10u + (*p - '0');
 		if (num < prev)
 			return TDS_CONVERT_OVERFLOW;
 	}
@@ -3325,14 +3305,14 @@ string_to_int8(const char *buf, const char *pend, TDS_INT8 * res)
 {
 	TDS_UINT8 num;
 	TDS_INT parse_res;
-	bool negative;
+	int sign = 0;
 
-	parse_res = parse_int8(buf, pend, &num, &negative);
+	parse_res = parse_int8(buf, pend, &num, &sign);
 	if (parse_res < 0)
 		return parse_res;
 
 	/* check for overflow and convert unsigned to signed */
-	if (negative) {
+	if (sign) {
 		if (num > (((TDS_UINT8) 1) << 63))
 			return TDS_CONVERT_OVERFLOW;
 		*res = 0 - num;
@@ -3354,99 +3334,18 @@ string_to_uint8(const char *buf, const char *pend, TDS_UINT8 * res)
 {
 	TDS_UINT8 num;
 	TDS_INT parse_res;
-	bool negative;
+	int sign = 0;
 
-	parse_res = parse_int8(buf, pend, &num, &negative);
+	parse_res = parse_int8(buf, pend, &num, &sign);
 	if (parse_res < 0)
 		return parse_res;
 
 	/* check for overflow */
-	if (negative && num)
+	if (sign && num)
 		return TDS_CONVERT_OVERFLOW;
 
 	*res = num;
 	return sizeof(TDS_UINT8);
-}
-
-/**
- * Parse a string for numbers.
- *
- * Syntax can be something like " *[+-] *[0-9]*\.[0-9]* *".
- *
- * The function ignore all spaces. It strips leading zeroes which could
- * possibly lead to overflow.
- * The function returns a pointer to the integer part followed by *p_digits
- * digits followed by a dot followed by *p_decimals digits (dot and
- * fractional digits are optional, in this case *p_decimals is 0).
- *
- * @param buf         start of string
- * @param pend        pointer to string end
- * @param p_negative  store if number is negative
- * @param p_digits    store number of integer digits
- * @param p_decimals  store number of fractional digits
- * @return pointer to first not zero digit. If NULL this indicate a syntax
- *         error.
- */
-static const char *
-parse_numeric(const char *buf, const char *pend, bool *p_negative, size_t *p_digits, size_t *p_decimals)
-{
-	enum { blank = ' ' };
-#define SKIP_IF(cond) while (p != pend && (cond)) ++p;
-	const char *p, *start;
-	bool negative = false;
-
-	*p_decimals = 0;
-	p = buf;
-
-	/* ignore leading spaces */
-	SKIP_IF(*p == blank);
-	if (p == pend) {
-		*p_negative = false;
-		*p_digits = 0;
-		return p;
-	}
-
-	/* check for sign */
-	switch (*p) {
-	case '-':
-		negative = true;
-		/* fall thru */
-	case '+':
-		/* skip spaces between sign and number */
-		++p;
-		SKIP_IF(*p == blank);
-		break;
-	}
-	*p_negative = negative;
-
-	/* a digit must be present */
-	if (p == pend)
-		return NULL;
-
-	/*
-	 * skip leading zeroes
-	 * Not skipping them cause numbers like "000000000000" to
-	 * appear like overflow
-	 */
-	SKIP_IF(*p == '0');
-
-	start = p;
-	SKIP_IF(TDS_ISDIGIT(*p));
-	*p_digits = p - start;
-
-	/* parse decimal part */
-	if (p != pend && *p == '.') {
-		const char *decimals_start = ++p;
-		SKIP_IF(TDS_ISDIGIT(*p));
-		*p_decimals = p - decimals_start;
-	}
-
-	/* check for trailing spaces */
-	SKIP_IF(*p == blank);
-	if (p != pend)
-		return NULL;
-
-	return start;
 }
 
 /** @} */

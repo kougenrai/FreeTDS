@@ -17,13 +17,15 @@ if(PERL_FOUND AND NOT EXISTS "${CMAKE_SOURCE_DIR}/configure")
 endif(PERL_FOUND AND NOT EXISTS "${CMAKE_SOURCE_DIR}/configure")
 
 if(WIN32)
-	set(win_SRCS winlogin.c winsetup.c winmain.c odbc_w.def setup.rc)
+	set(win_SRCS ../../win32/winlogin.c ../../win32/winsetup.c ../../win32/initnet.c ../../win32/FreeTDS_w.def ../../win32/setup.rc)
+	set(libs odbccp32)
+else()
+	set(libs ${lib_ODBCINST})
 endif()
-set(libs ${lib_ODBCINST})
 
 add_library(tdsodbc SHARED
 	odbc.c connectparams.c convert_tds2sql.c
-	descriptor.c prepare_query.c odbc_util.c bcp.c
+	descriptor.c prepare_query.c odbc_util.c
 	native.c sql2tds.c error.c odbc_checks.c sqlwchar.c sqlwparams.h
 	odbc_export.h error_export.h odbc_data.c ${win_SRCS}
 )

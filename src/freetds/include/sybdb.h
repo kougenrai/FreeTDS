@@ -42,6 +42,9 @@ extern "C"
 #define TDS_STATIC_CAST(type, a) ((type)(a))
 #endif
 
+static const char rcsid_sybdb_h[] = "$Id: sybdb.h,v 1.106 2011-12-05 02:26:31 jklowden Exp $";
+static const void *const no_unused_sybdb_h_warn[] = { rcsid_sybdb_h, no_unused_sybdb_h_warn };
+
 #ifdef FALSE
 #undef FALSE
 #endif
@@ -61,8 +64,7 @@ extern "C"
 #define INT_TIMEOUT	3
 
 #define DBMAXNUMLEN 33
-/* https://msdn.microsoft.com/en-us/library/ms176061.aspx */
-#define DBMAXNAME   128
+#define DBMAXNAME   30
 
 /**
  * DBVERSION_xxx are used with dbsetversion()
@@ -73,9 +75,9 @@ extern "C"
 #define DBVERSION_42      3
 #define DBVERSION_70      4
 #define DBVERSION_71      5
+#define DBVERSION_80      DBVERSION_71
 #define DBVERSION_72      6
 #define DBVERSION_73      7
-#define DBVERSION_74      8
 
 /* these two are defined by Microsoft for dbsetlversion() */
 #define DBVER42 	  DBVERSION_42
@@ -99,7 +101,6 @@ extern "C"
 #define DBTDS_7_1               9	/* Microsoft SQL Server 2000 */
 #define DBTDS_7_2               10	/* Microsoft SQL Server 2005 */
 #define DBTDS_7_3               11	/* Microsoft SQL Server 2008 */
-#define DBTDS_7_4               12	/* Microsoft SQL Server 2012/2014 */
 
 #define DBTXPLEN 16
 
@@ -212,24 +213,8 @@ enum
 #define SYBMONEYN	SYBMONEYN
 	SYBDATETIMN = 111,	/* 0x6F */
 #define SYBDATETIMN	SYBDATETIMN
-	SYBNVARCHAR = 103,	/* 0x67 */
+	SYBNVARCHAR = 103	/* 0x67 */
 #define SYBNVARCHAR	SYBNVARCHAR
-	SYBDATE = 49,		/* 0x31 */
-#define SYBDATE SYBDATE
-	SYBTIME = 51,		/* 0x33 */
-#define SYBTIME SYBTIME
-	SYBBIGDATETIME = 187,	/* 0xBB */
-#define SYBBIGDATETIME SYBBIGDATETIME
-	SYBBIGTIME = 188,	/* 0xBC */
-#define SYBBIGTIME SYBBIGTIME
-	SYBMSDATE = 40,		/* 0x28 */
-#define SYBMSDATE SYBMSDATE
-	SYBMSTIME = 41,		/* 0x29 */
-#define SYBMSTIME SYBMSTIME
-	SYBMSDATETIME2 = 42,	/* 0x2A */
-#define SYBMSDATETIME2 SYBMSDATETIME2
-	SYBMSDATETIMEOFFSET = 43, /* 0x2B */
-#define SYBMSDATETIMEOFFSET SYBMSDATETIMEOFFSET
 };
 
 #define SYBAOPCNT  0x4b
@@ -262,8 +247,6 @@ typedef unsigned char DBBINARY;
 typedef tds_sysdep_real32_type DBREAL;
 typedef tds_sysdep_real64_type DBFLT8;
 typedef unsigned tds_sysdep_int16_type DBUSMALLINT;
-typedef unsigned tds_sysdep_int32_type DBUINT;
-typedef unsigned tds_sysdep_int64_type DBUBIGINT;
 
 typedef struct 
 {
@@ -308,18 +291,6 @@ typedef struct
 	DBUSMALLINT days;	/* days since Jan-1-1900 */
 	DBUSMALLINT minutes;	/* minutes since midnight */
 } DBDATETIME4;
-
-typedef struct
-{
-	DBUBIGINT  time;	/**< time, 7 digit precision */
-	DBINT      date;	/**< date, 0 = 1900-01-01 */
-	DBSMALLINT offset;	/**< time offset */
-	DBUSMALLINT time_prec:3;
-	DBUSMALLINT _res:10;
-	DBUSMALLINT has_time:1;
-	DBUSMALLINT has_date:1;
-	DBUSMALLINT has_offset:1;
-} DBDATETIMEALL;
 
 #ifdef MSDBLIB
 # define SQLCHAR SYBCHAR
@@ -471,7 +442,7 @@ struct tds_microsoft_dbdaterec
 	DBINT minute;		/* 0 - 59 		   */
 	DBINT second;		/* 0 - 59 		   */
 	DBINT millisecond;	/* 0 - 999 		   */
-	DBINT tzone;		/* -840 - 840		   */
+	DBINT tzone;		/* 0 - 127  (Sybase only)  */	
 };					
 
 struct tds_sybase_dbdaterec
@@ -486,49 +457,14 @@ struct tds_sybase_dbdaterec
 	DBINT datehour; 	/* 0 - 23   	     	  */
 	DBINT dateminute;	/* 0 - 59   	     	  */
 	DBINT datesecond;	/* 0 - 59   	     	  */
-	DBINT datemsecond;	/* 0 - 999  	     	  */
-	DBINT datetzone;	/* -840 - 840 	     	  */
-};
-
-struct tds_microsoft_dbdaterec2
-{
-	DBINT year;		/* 1753 - 9999  	   */
-	DBINT quarter;		/* 1 - 4 		   */
-	DBINT month;		/* 1 - 12 		   */
-	DBINT day;		/* 1 - 31 		   */
-	DBINT dayofyear;	/* 1 - 366 		   */
-	DBINT week;            	/* 1 - 54 (for leap years) */
-	DBINT weekday;		/* 1 - 7 (Mon. - Sun.)     */
-	DBINT hour;		/* 0 - 23 		   */
-	DBINT minute;		/* 0 - 59 		   */
-	DBINT second;		/* 0 - 59 		   */
-	DBINT nanosecond;	/* 0 - 999999999	   */
-	DBINT tzone;		/* 0 - 127  (Sybase only)  */
-};
-
-struct tds_sybase_dbdaterec2
-{
-	DBINT dateyear;		/* 1900 and counting	  */
-	DBINT quarter;		/* 0 - 3 (Microsoft only) */
-	DBINT datemonth;	/* 0 - 11   	     	  */
-	DBINT datedmonth;	/* 1 - 31   	     	  */
-	DBINT datedyear;	/* 1 - 366  	     	  */
-	DBINT week;            	/* 1 - 54 (Microsoft only) */
-	DBINT datedweek;	/* 0 - 6    	     	  */
-	DBINT datehour; 	/* 0 - 23   	     	  */
-	DBINT dateminute;	/* 0 - 59   	     	  */
-	DBINT datesecond;	/* 0 - 59   	     	  */
-	DBINT datensecond;	/* 0 - 999999999  	  */
+	DBINT datemsecond;	/* 0 - 997  	     	  */
 	DBINT datetzone;	/* 0 - 127  	     	  */
 };
 
-
 #ifdef MSDBLIB
-typedef struct tds_microsoft_dbdaterec  DBDATEREC;
-typedef struct tds_microsoft_dbdaterec2 DBDATEREC2;
+typedef struct tds_microsoft_dbdaterec DBDATEREC;
 #else
-typedef struct tds_sybase_dbdaterec  DBDATEREC;
-typedef struct tds_sybase_dbdaterec2 DBDATEREC2;
+typedef struct tds_sybase_dbdaterec DBDATEREC;
 #endif
 
 typedef int (*EHANDLEFUNC) (DBPROCESS * dbproc, int severity, int dberr, int oserr, char *dberrstr, char *oserrstr);
@@ -566,10 +502,6 @@ typedef int (*MHANDLEFUNC) (DBPROCESS * dbproc, DBINT msgno, int msgstate, int s
 #define DECIMALBIND       18
 #define SRCNUMERICBIND    19
 #define SRCDECIMALBIND    20
-#define DATEBIND          21
-#define TIMEBIND          22
-#define BIGDATETIMEBIND   23
-#define BIGTIMEBIND       24
 #define BIGINTBIND        30
 #define DATETIME2BIND     31
 #define MAXBINDTYPES      32	/* keep last */
@@ -678,6 +610,8 @@ int dbtabcount(DBPROCESS * dbprocess);
 char *dbtabname(DBPROCESS * dbprocess, int tabnum);
 char *dbtabsource(DBPROCESS * dbprocess, int colnum, int *tabnum);
 
+RETCODE dbsetlshort(LOGINREC * login, int value, int which);
+
 RETCODE dbsendpassthru(DBPROCESS * dbprocess, DBVOIDPTR bufp);
 RETCODE dbrecvpassthru(DBPROCESS * dbprocess, DBVOIDPTR * bufp);
 
@@ -737,7 +671,6 @@ RETCODE dbtablecolinfo (DBPROCESS *dbproc, DBINT column, DBCOL *pdbcol );
 RETCODE	dbcolinfo (DBPROCESS *dbproc, CI_TYPE type, DBINT column, DBINT computeid, DBCOL *pdbcol);
 DBINT dbcollen(DBPROCESS * dbproc, int column);
 char *dbcolname(DBPROCESS * dbproc, int column);
-const char *dbacolname(DBPROCESS * dbproc, int computeid, int column);
 char *dbcolsource(DBPROCESS * dbproc, int colnum);
 int dbcoltype(DBPROCESS * dbproc, int column);
 DBTYPEINFO *dbcoltypeinfo(DBPROCESS * dbproc, int column);
@@ -758,7 +691,6 @@ DBINT dbcurrow(DBPROCESS * dbproc);
 BYTE *dbdata(DBPROCESS * dbproc, int column);
 int dbdatecmp(DBPROCESS * dbproc, DBDATETIME * d1, DBDATETIME * d2);
 RETCODE dbdatecrack(DBPROCESS * dbproc, DBDATEREC * di, DBDATETIME * dt);
-RETCODE dbanydatecrack(DBPROCESS * dbproc, DBDATEREC2 * di, int type, const void *data);
 DBINT dbdatlen(DBPROCESS * dbproc, int column);
 DBBOOL dbdead(DBPROCESS * dbproc);
 
@@ -1243,7 +1175,6 @@ RETCODE dbwritetext(DBPROCESS * dbproc, char *objname, DBBINARY * textptr, DBTIN
 /* LOGINREC manipulation */
 RETCODE dbsetlname(LOGINREC * login, const char *value, int which);
 RETCODE dbsetlbool(LOGINREC * login, int value, int which);
-RETCODE dbsetlshort(LOGINREC * login, int value, int which);
 RETCODE dbsetllong(LOGINREC * login, long value, int which);
 RETCODE dbsetlversion (LOGINREC * login, BYTE version);
 
@@ -1288,11 +1219,6 @@ RETCODE dbsetlversion (LOGINREC * login, BYTE version);
 #define DBSETDBNAME		14
 #define DBSETLDBNAME(x,y)	dbsetlname((x), (y), DBSETDBNAME)
 #define DBSETLVERSION(login, version) dbsetlversion((login), (version))
-/* settings from here are purely FreeTDS extensions */
-#define DBSETUTF16		1001
-#define DBSETLUTF16(x,y)	dbsetlbool((x), (y), DBSETUTF16)
-#define DBSETNTLMV2		1002
-#define DBSETLNTLMV2(x,y)	dbsetlbool((x), (y), DBSETNTLMV2)
 
 RETCODE bcp_init(DBPROCESS * dbproc, const char *tblname, const char *hfile, const char *errfile, int direction);
 DBINT bcp_done(DBPROCESS * dbproc);

@@ -48,7 +48,7 @@
 #include <freetds/bytes.h>
 #include <freetds/stream.h>
 #include <freetds/string.h>
-#include <freetds/checks.h>
+#include "tds_checks.h"
 
 static size_t read_and_convert(TDSSOCKET * tds, TDSICONV * char_conv,
 			       size_t * wire_size, char *outbuf, size_t outbytesleft);
@@ -247,6 +247,8 @@ tds_get_char_data(TDSSOCKET * tds, char *row_buffer, size_t wire_size, TDSCOLUMN
 void *
 tds_get_n(TDSSOCKET * tds, void *dest, size_t need)
 {
+	assert(need >= 0);
+
 	for (;;) {
 		unsigned int have = tds->in_len - tds->in_pos;
 

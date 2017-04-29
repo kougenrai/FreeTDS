@@ -4,7 +4,7 @@ bin_PROGRAMS	=	tdspool
 
 tdspool_SOURCES	=	config.c main.c member.c user.c util.c pool.h
 SERVERDIR	=	../server
-LDADD		=	../server/libtdssrv.la $(LTLIBICONV)
+LDADD		=	../server/libtdssrv.la $(LTLIBICONV) $(NETWORK_LIBS)
 EXTRA_DIST	=	BUGS pool.conf
 
 ETC	=	$(DESTDIR)$(sysconfdir)

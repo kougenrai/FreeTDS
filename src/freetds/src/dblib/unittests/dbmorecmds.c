@@ -5,6 +5,9 @@
 
 #include "common.h"
 
+static char software_version[] = "$Id: dbmorecmds.c,v 1.15 2009-02-27 15:52:48 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version,	no_unused_var_warn };
+
 int failed = 0;
 
 int
@@ -71,8 +74,7 @@ main(int argc, char **argv)
 
 	if (dbresults(dbproc) == SUCCEED) {
 		do {
-			while (dbnextrow(dbproc) != NO_MORE_ROWS)
-				continue;
+			while (dbnextrow(dbproc) != NO_MORE_ROWS);
 			nresults++;
 		} while (dbmorecmds(dbproc) == SUCCEED);
 	}
@@ -94,8 +96,7 @@ main(int argc, char **argv)
 
 	do {
 		if (dbresults(dbproc) == SUCCEED) {
-			while (dbnextrow(dbproc) != NO_MORE_ROWS)
-				continue;
+			while (dbnextrow(dbproc) != NO_MORE_ROWS);
 			nresults++;
 		}
 	} while (dbmorecmds(dbproc) == SUCCEED);

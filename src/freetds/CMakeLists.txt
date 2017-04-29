@@ -2,12 +2,6 @@ project(FreeTDS)
 
 cmake_minimum_required(VERSION 2.6)
 
-option(WITH_OPENSSL        "Link in OpenSSL if found" ON)
-option(ENABLE_ODBC_WIDE    "Enable ODBC wide character support" ON)
-option(ENABLE_KRB5         "Enable Kerberos support" OFF)
-option(ENABLE_ODBC_MARS    "Enable MARS" OFF)
-option(ENABLE_EXTRA_CHECKS "Enable internal extra checks, DO NOT USE in production" OFF)
-
 if(COMMAND cmake_policy)
 	cmake_policy(SET CMP0003 NEW)
 	cmake_policy(SET CMP0005 NEW)
@@ -21,7 +15,7 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/configure")
 		set(VERSION ${CMAKE_MATCH_1})
 	endif()
 else()
-	file(STRINGS "${CMAKE_SOURCE_DIR}/configure.ac" VER LIMIT_COUNT 1 REGEX "^AC_INIT\\(FreeTDS,[ 	]*1[.].*\\)$")
+	file(STRINGS "${CMAKE_SOURCE_DIR}/configure.ac" VER LIMIT_COUNT 1 REGEX "^AC_INIT\\(FreeTDS,[ 	]*0[.].*\\)$")
 	if(VER MATCHES "AC_INIT\\(FreeTDS,[ 	]*(.+)\\)$")
 		set(VERSION ${CMAKE_MATCH_1})
 	endif()
@@ -64,8 +58,6 @@ math(EXPR BUILD_NUMBER "${BUILD_NUMBER}")
 set(FREETDS_TOPDIR ${CMAKE_CURRENT_LIST_DIR})
 
 enable_testing()
-set(CMAKE_CTEST_COMMAND ctest)
-add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
 
 # TODO depends on configure
 add_definitions(-D_REENTRANT -D_THREAD_SAFE)
@@ -76,7 +68,6 @@ include(CheckTypeSize)
 include(CheckFunctionExists)
 include(CheckLibraryExists)
 include(CheckStructHasMember)
-include(CheckPrototypeDefinition)
 
 find_package(Perl)
 
@@ -91,7 +82,6 @@ foreach(fn
 	com_err.h
 	dirent.h
 	errno.h
-	getopt.h
 	inttypes.h
 	langinfo.h
 	libgen.h
@@ -101,8 +91,10 @@ foreach(fn
 	netdb.h
 	netinet/in.h
 	netinet/tcp.h
+	odbcss.h
 	paths.h
 	poll.h
+	readpassphrase.h
 	roken.h
 	signal.h
 	sql.h
@@ -112,7 +104,6 @@ foreach(fn
 	stdint.h
 	string.h
 	strings.h
-	sys/eventfd.h
 	sys/ioctl.h
 	sys/param.h
 	sys/resource.h
@@ -132,14 +123,6 @@ foreach(fn
 	config_write("/* Define to 1 if you have the <${fn}> header file. */\n")
 	config_write("#cmakedefine ${var} 1\n\n")
 endforeach(fn)
-
-if(WITH_OPENSSL)
-	find_package(OpenSSL)
-endif(WITH_OPENSSL)
-if(OPENSSL_FOUND)
-	config_write("#define HAVE_OPENSSL 1\n\n")
-	include_directories(${OPENSSL_INCLUDE_DIR})
-endif(OPENSSL_FOUND)
 
 set(CMAKE_THREAD_PREFER_PTHREAD ON)
 find_package(Threads REQUIRED)
@@ -169,43 +152,16 @@ endmacro(ADD_HEADER)
 add_header(HAVE_WCHAR_H wchar.h)
 add_header(HAVE_WINDOWS_H windows.h)
 add_header(HAVE_SQL_H sql.h)
-add_header(HAVE_SQLEXT_H sqlext.h)
-foreach(fn char double float int short long "long double" "long long" "SQLWCHAR" "void *" wchar_t __int64
-	  SQLLEN SQLROWOFFSET SQLROWSETSIZE SQLSETPOSIROW)
+foreach(fn char double float int short long "long double" "long long" "SQLWCHAR" "void *" wchar_t __int64)
 	string(REGEX REPLACE "[/. ]" "_" var "${fn}")
 	string(REPLACE "*" "P" var "${var}")
-	string(TOUPPER "HAVE_${var}" have)
 	string(TOUPPER "SIZEOF_${var}" var)
 	CHECK_TYPE_SIZE(${fn} ${var})
-	if(HAVE_${var})
-		set(${have} 1 CACHE INTERNAL "Have type ${fn}")
-	else()
+	if(NOT HAVE_${var})
 		set(${var} 0)
 	endif()
 	config_write("#define ${var} \\@${var}\\@\n\n")
 endforeach(fn)
-
-foreach(fn SQLLEN SQLROWOFFSET SQLROWSETSIZE SQLSETPOSIROW)
-	config_write("/* Define to 1 if you have type <${fn}>. */\n#cmakedefine HAVE_${fn} 1\n\n")
-endforeach(fn)
-
-check_prototype_definition(SQLColAttribute
-"SQLRETURN  SQL_API SQLColAttribute (SQLHSTMT StatementHandle,
-	SQLUSMALLINT ColumnNumber, SQLUSMALLINT FieldIdentifier,
-	SQLPOINTER CharacterAttribute, SQLSMALLINT BufferLength,
-	SQLSMALLINT *StringLength, SQLLEN * NumericAttribute)"
-	SQL_SUCCESS
-	"${CMAKE_EXTRA_INCLUDE_FILES}"
-	TDS_SQLCOLATTRIBUTE_SQLLEN)
-config_write("/* Define to 1 if last argument of SQLColAttribute it's SQLLEN * */\n#cmakedefine TDS_SQLCOLATTRIBUTE_SQLLEN 1\n\n")
-
-check_prototype_definition(SQLParamOptions
-	"SQLRETURN SQL_API SQLParamOptions(SQLHSTMT hstmt, SQLULEN crow, SQLULEN *pirow)"
-	SQL_SUCCESS
-	"${CMAKE_EXTRA_INCLUDE_FILES}"
-	TDS_SQLPARAMOPTIONS_SQLLEN)
-config_write("/* Define to 1 if SQLParamOptions accept SQLULEN as arguments */\n#cmakedefine TDS_SQLPARAMOPTIONS_SQLLEN 1\n\n")
-
 set(CMAKE_EXTRA_INCLUDE_FILES)
 
 macro(SELECT_TYPE VAR SIZE TYPES ERROR)
@@ -233,7 +189,7 @@ SELECT_TYPE(tds_sysdep_intptr_type ${SIZEOF_VOID_P} "short;int;long;__int64" "No
 
 # find functions
 set(CMAKE_REQUIRED_LIBRARIES ${CMAKE_THREAD_LIBS_INIT})
-set(FUNCS asprintf vasprintf strtok_r readpassphrase
+set(FUNCS _atoi64 asprintf vasprintf strtok_r readpassphrase
 	strlcpy strlcat basename getopt strsep
 	vsnprintf _vsnprintf snprintf _snprintf _vscprintf gettimeofday
 	nl_langinfo locale_charset setenv putenv
@@ -242,55 +198,16 @@ set(FUNCS asprintf vasprintf strtok_r readpassphrase
 	_fseeki64 _ftelli64 setrlimit
 	inet_ntoa_r getipnodebyaddr getipnodebyname
 	getaddrinfo inet_ntop gethostname poll socketpair
-	clock_gettime fseeko pthread_cond_timedwait pthread_cond_timedwait_relative_np
+	clock_gettime fseeko pthread_cond_timedwait
 	pthread_condattr_setclock _lock_file _unlock_file usleep nanosleep
-	readdir_r eventfd daemon)
-
-macro(CHECK_FUNCTION_EXISTS_DEFINE func)
-	string(TOUPPER "HAVE_${func}" var)
-	check_function_exists(${func} ${var})
-	config_write("/* Define to 1 if you have function <${func}>. */\n")
-	config_write("#cmakedefine ${var} 1\n\n")
-endmacro()
-
-# TODO
-set(HAVE_GETADDRINFO 1 CACHE INTERNAL "")
+	readdir_r)
 
 foreach(func ${FUNCS})
-	check_function_exists_define(${func})
-endforeach(func)
-
-macro(CHECK_STDIO_FUNCTION_EXISTS FUNCTION)
-	string(TOUPPER "HAVE_${FUNCTION}" VARIABLE)
-	string(TOUPPER "CHECK_${FUNCTION}" CHECK)
-	if (NOT ${VARIABLE})
-		set(MACRO_CHECK_FUNCTION_DEFINITIONS
-			"-D${CHECK}=1 ${CMAKE_REQUIRED_FLAGS}")
-		message(STATUS "Looking for ${FUNCTION}")
-		try_compile(${VARIABLE}
-			${CMAKE_BINARY_DIR}
-			${CMAKE_SOURCE_DIR}/misc/cmake_checks.c
-			COMPILE_DEFINITIONS ${CMAKE_REQUIRED_DEFINITIONS}
-			CMAKE_FLAGS -DCOMPILE_DEFINITIONS:STRING=${MACRO_CHECK_FUNCTION_DEFINITIONS}
-			OUTPUT_VARIABLE OUTPUT)
-		if(${VARIABLE})
-			set(${VARIABLE} 1 CACHE INTERNAL "Have function ${FUNCTION}")
-			message(STATUS "Looking for ${FUNCTION} - found")
-			file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeOutput.log
-				"Determining if the function ${FUNCTION} exists passed with the following output:\n"
-				"${OUTPUT}\n\n")
-		else()
-			message(STATUS "Looking for ${FUNCTION} - not found")
-			set(${VARIABLE} "" CACHE INTERNAL "Have function ${FUNCTION}")
-			file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeError.log
-				"Determining if the function ${FUNCTION} exists failed with the following output:\n"
-				"${OUTPUT}\n\n")
-		endif()
-	endif()
-endmacro()
-
-foreach(func asprintf vasprintf vsnprintf _vsnprintf snprintf _snprintf _vscprintf)
-	check_stdio_function_exists(${func})
+	string(TOUPPER "HAVE_${func}" var)
+	check_function_exists(${func} ${var})
+	set(HAVE_GETADDRINFO 1 CACHE INTERNAL "")
+	config_write("/* Define to 1 if you have function <${func}>. */\n")
+	config_write("#cmakedefine ${var} 1\n\n")
 endforeach(func)
 
 set(CMAKE_REQUIRED_LIBRARIES)
@@ -319,17 +236,13 @@ if(HAVE_READLINE)
 endif(HAVE_READLINE)
 
 config_write("#cmakedefine HAVE_SQLGETPRIVATEPROFILESTRING 1\n\n")
-if(WIN32)
-	set(lib_ODBCINST odbccp32)
-	check_library_exists(legacy_stdio_definitions _vsnwprintf_s "" LEGACY_STDIO)
-	if(LEGACY_STDIO)
-		set(lib_ODBCINST ${lib_ODBCINST} legacy_stdio_definitions)
-	endif(LEGACY_STDIO)
-else()
-	search_library(SQLGetPrivateProfileString HAVE_SQLGETPRIVATEPROFILESTRING lib_ODBCINST "odbcinst;iodbcinst")
-endif()
+search_library(SQLGetPrivateProfileString HAVE_SQLGETPRIVATEPROFILESTRING lib_ODBCINST "odbcinst;iodbcinst")
 
 # flags
+set(ENABLE_ODBC_WIDE    ON  CACHE BOOL "Enable ODBC wide character support")
+set(ENABLE_EXTRA_CHECKS OFF CACHE BOOL "Enable internal extra checks, do not use in production")
+set(ENABLE_KRB5         OFF CACHE BOOL "Enable Kerberos support")
+set(ENABLE_ODBC_MARS    OFF CACHE BOOL "Enable MARS")
 foreach(flag ODBC_WIDE EXTRA_CHECKS KRB5 ODBC_MARS)
 	config_write("#cmakedefine ENABLE_${flag} 1\n\n")
 endforeach(flag)
@@ -349,8 +262,6 @@ config_write("#ifdef _MSC_VER
 if(WIN32)
 	config_write("/* Define to 1 if you want to use SSPI for Win32 */\n#define HAVE_SSPI 1\n\n")
 	config_write("/* define to format string used for 64bit integers */\n#define TDS_I64_PREFIX \"I64\"\n\n")
-	config_write("/* Define to 1 if you have the SQLGetPrivateProfileString function. */\n#define HAVE_SQLGETPRIVATEPROFILESTRING 1\n\n")
-
 else(WIN32)
 	# this section make just work on Linux, many definition are not checked
 	config_write("#define HAVE_FUNC_GETPWUID_R_5 1\n\n")
@@ -358,36 +269,11 @@ else(WIN32)
 	config_write("/* define to format string used for 64bit integers */\n#define TDS_I64_PREFIX \"ll\"\n\n")
 	config_write("#define UNIXODBC 1\n\n#define _GNU_SOURCE 1\n\n")
 
-	if(NOT OPENSSL_FOUND)
-		include(FindGnuTLS)
-		if(GNUTLS_FOUND)
-			config_write("#define HAVE_GNUTLS 1\n")
-			set(CMAKE_REQUIRED_LIBRARIES ${GNUTLS_LIBRARIES})
-			check_function_exists_define(gnutls_certificate_set_verify_function)
-			check_function_exists_define(gnutls_record_disable_padding)
-			check_function_exists_define(gnutls_rnd)
-			set(CMAKE_REQUIRED_LIBRARIES)
-			pkg_check_modules(NETTLEDEP gnutls)
-			if (";${NETTLEDEP_STATIC_LIBRARIES};" MATCHES ";nettle;")
-				set(lib_GNUTLS ${GNUTLS_LIBRARIES})
-				config_write("#define GNUTLS_USE_NETTLE 1\n\n")
-				pkg_check_modules(NETTLE nettle)
-				if(NETTLE_FOUND)
-					set(lib_GNUTLS ${GNUTLS_LIBRARIES} ${NETTLE_LIBRARIES})
-					config_write("#define HAVE_NETTLE 1\n\n")
-					if (";${NETTLEDEP_STATIC_LIBRARIES};" MATCHES ";hogweed;")
-						set(lib_GNUTLS ${lib_GNUTLS} hogweed)
-					endif()
-					if (";${NETTLEDEP_STATIC_LIBRARIES};" MATCHES ";gmp;")
-						set(lib_GNUTLS ${lib_GNUTLS} gmp)
-						config_write("#define HAVE_GMP 1\n\n")
-					endif()
-				endif(NETTLE_FOUND)
-			else()
-				set(lib_GNUTLS ${GNUTLS_LIBRARIES} gcrypt tasn1)
-			endif()
-		endif(GNUTLS_FOUND)
-	endif(NOT OPENSSL_FOUND)
+	include(FindGnuTLS)
+	if(GNUTLS_FOUND)
+		config_write("#define HAVE_GNUTLS 1\n#define HAVE_GNUTLS_RECORD_DISABLE_PADDING 1\n")
+		set(lib_GNUTLS ${GNUTLS_LIBRARIES} gcrypt)
+	endif(GNUTLS_FOUND)
 
 	if(NOT HAVE_CLOCK_GETTIME AND NOT HAVE_GETHRTIME)
 		search_library(clock_gettime HAVE_CLOCK_GETTIME lib_RT "rt;posix4")
@@ -410,6 +296,12 @@ config_write("
 #define HAVE_RL_ON_NEW_LINE 1
 #define HAVE_RL_RESET_LINE_STATE 1
 
+// odbc
+#define HAVE_SQLLEN 1
+#define HAVE_SQLSETPOSIROW 1
+#define TDS_SQLCOLATTRIBUTE_SQLLEN 1
+#define TDS_SQLPARAMOPTIONS_SQLLEN 1
+
 // iconv
 #define HAVE_ICONV 1
 #define ICONV_CONST
@@ -418,26 +310,15 @@ config_write("
 endif(WIN32)
 
 set(lib_BASE ${lib_RT} ${CMAKE_THREAD_LIBS_INIT})
-if(EXISTS "${CMAKE_SOURCE_DIR}/iconv/lib/iconv.lib")
-	set(lib_BASE ${lib_BASE} ${CMAKE_THREAD_LIBS_INIT} "${CMAKE_SOURCE_DIR}/iconv/lib/iconv.lib")
-	config_write("#define HAVE_ICONV 1\n\n")
-	config_write("#define ICONV_CONST \n\n")
-endif()
 
 if(WIN32)
 	set(lib_NETWORK ws2_32)
 else(WIN32)
 	# TODO check libraries
-	set(lib_NETWORK gssapi_krb5)
+	set(lib_NETWORK ${lib_GNUTLS} gssapi_krb5)
 endif(WIN32)
 
-if(OPENSSL_FOUND)
-	set(lib_NETWORK ${lib_NETWORK} ${OPENSSL_LIBRARIES})
-elseif(GNUTLS_FOUND)
-	set(lib_NETWORK ${lib_NETWORK} ${lib_GNUTLS})
-endif(OPENSSL_FOUND)
-
-include_directories(${CMAKE_BINARY_DIR}/include include win32 iconv/include)
+include_directories(${CMAKE_BINARY_DIR}/include include win32)
 
 add_subdirectory(src/replacements)
 add_subdirectory(src/tds)
@@ -450,5 +331,5 @@ configure_file(${CMAKE_BINARY_DIR}/include/config.h.in ${CMAKE_BINARY_DIR}/inclu
 configure_file(${CMAKE_SOURCE_DIR}/include/tds_sysdep_public.h.in ${CMAKE_BINARY_DIR}/include/tds_sysdep_public.h)
 configure_file(${CMAKE_SOURCE_DIR}/include/freetds/version.h.in ${CMAKE_BINARY_DIR}/include/freetds/version.h)
 if(NOT EXISTS "${CMAKE_SOURCE_DIR}/configure")
-	configure_file(${CMAKE_SOURCE_DIR}/src/odbc/version.rc.in ${CMAKE_SOURCE_DIR}/src/odbc/version.rc)
+	configure_file(${CMAKE_SOURCE_DIR}/win32/version.rc.in ${CMAKE_SOURCE_DIR}/win32/version.rc)
 endif(NOT EXISTS "${CMAKE_SOURCE_DIR}/configure")

@@ -20,8 +20,10 @@
 #ifndef _tdsbytes_h_
 #define _tdsbytes_h_
 
+/* $Id: tdsbytes.h,v 1.5 2010-07-17 20:05:52 freddy77 Exp $ */
+
 #ifndef _tds_h_
-#error tds.h must be included before bytes.h
+#error tds.h must be included before tdsbytes.h
 #endif
 
 /*
@@ -160,11 +162,7 @@ typedef union {
 /* map unaligned macro to aligned ones */
 #if defined(__i386__) || defined(__amd64__) || defined(__CRIS__) ||\
   defined(__powerpc__) || defined(__powerpc64__) || defined(__ppc__) || defined(__ppc64__) ||\
-  defined(__s390__) || defined(__s390x__) || defined(__m68k__) ||\
-  (defined(_MSC_VER) && (defined(_M_AMD64) || defined(_M_IX86) || defined(_M_X64))) ||\
-  defined(__ARM_FEATURE_UNALIGNED) ||\
-  defined(__ARM_ARCH_7__) || defined(__ARM_ARCH_8__) ||\
-  (defined(_M_ARM) && (_M_ARM >= 7))
+  defined(__s390__) || defined(__s390x__) || defined(__m68k__)
 # ifdef WORDS_BIGENDIAN
 #  undef TDS_GET_UA2BE
 #  undef TDS_GET_UA4BE
@@ -210,14 +208,14 @@ static inline TDS_USMALLINT
 TDS_GET_UA2LE(void *ptr)
 {
 	unsigned long res;
-	__asm__ ("lhbrx %0,0,%1\n" : "=r" (res) : "r" (ptr), "m"(*(TDS_USMALLINT*)ptr));
+	__asm__ __volatile__ ("lhbrx %0,0,%1\n" : "=r" (res) : "r" (ptr), "m"(*(TDS_USMALLINT*)ptr));
 	return (TDS_USMALLINT) res;
 }
 static inline TDS_UINT
 TDS_GET_UA4LE(void *ptr)
 {
 	unsigned long res;
-	__asm__ ("lwbrx %0,0,%1\n" : "=r" (res) : "r" (ptr), "m"(*(TDS_UINT*)ptr));
+	__asm__ __volatile__ ("lwbrx %0,0,%1\n" : "=r" (res) : "r" (ptr), "m"(*(TDS_UINT*)ptr));
 	return (TDS_UINT) res;
 }
 
@@ -226,12 +224,12 @@ TDS_GET_UA4LE(void *ptr)
 static inline void
 TDS_PUT_UA2LE(void *ptr, unsigned data)
 {
-    __asm__ ("sthbrx %1,0,%2\n" : "=m" (*(TDS_USMALLINT *)ptr) : "r" (data), "r" (ptr));
+    asm volatile ("sthbrx %1,0,%2\n" : "=m" (*(TDS_USMALLINT *)ptr) : "r" (data), "r" (ptr));
 }
 static inline void
 TDS_PUT_UA4LE(void *ptr, unsigned data)
 {
-    __asm__ ("stwbrx %1,0,%2\n" : "=m" (*(TDS_UINT *)ptr) : "r" (data), "r" (ptr));
+    asm volatile ("stwbrx %1,0,%2\n" : "=m" (*(TDS_UINT *)ptr) : "r" (data), "r" (ptr));
 }
 #endif
 

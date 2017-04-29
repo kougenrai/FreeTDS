@@ -3,6 +3,9 @@
 
 /* Test using array binding */
 
+static char software_version[] = "$Id: array_out.c,v 1.19 2011-07-12 10:16:59 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
+
 static const char *test_query = NULL;
 static int trunc = 0;
 static int record_bind = 0;
@@ -40,7 +43,7 @@ query_test(const char* expected, const char *expected_status)
 
 	if (!record_bind) {
 		ids = (SQLUINTEGER *) ODBC_GET(sizeof(SQLUINTEGER) * ARRAY_SIZE);
-		descs = (SQLCHAR *) ODBC_GET(sizeof(SQLCHAR) * ARRAY_SIZE * desc_len);
+		descs = ODBC_GET(sizeof(SQLCHAR) * ARRAY_SIZE * desc_len);
 		desc_lens = (SQLLEN *) ODBC_GET(sizeof(SQLLEN) * ARRAY_SIZE);
 		id_lens = (SQLLEN *) ODBC_GET(sizeof(SQLLEN) * ARRAY_SIZE);
 		assert(descs && ids && desc_lens && id_lens);

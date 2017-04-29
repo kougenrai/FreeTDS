@@ -45,7 +45,7 @@
 #endif
 
 #include <freetds/tds.h>
-#include <freetds/checks.h>
+#include "tds_checks.h"
 #include <freetds/thread.h>
 
 /**
@@ -262,10 +262,10 @@ static const TDS_ERROR_MESSAGE tds_error_messages[] =
 	, { TDSEWRIT,              EXCOMM,	"Write to the server failed" }
 	, { TDSECONF,              EXUSER,	"Local configuration error.  "
 						"Check TDSDUMPCONFIG log for details." }
-	/* last, with msgno == TDSEOK */
-	, { TDSEOK,              EXCONSISTENCY,	"unrecognized msgno" }
+	/* last, with masgno == 0 */
+	, { 0,              EXCONSISTENCY,	"unrecognized msgno" }
 	};
-
+	
 static
 const char * retname(int retcode)
 {
@@ -322,7 +322,7 @@ tdserror (const TDSCONTEXT * tds_ctx, TDSSOCKET * tds, int msgno, int errnum)
 	tdsdump_log(TDS_DBG_FUNC, "tdserror(%p, %p, %d, %d)\n", tds_ctx, tds, msgno, errnum);
 
 	/* look up the error message */
-	for (err = tds_error_messages; err->msgno != TDSEOK; ++err) {
+	for (err = tds_error_messages; err->msgno; ++err) {
 		if (err->msgno == msgno)
 			break;
 	}
@@ -355,7 +355,7 @@ tdserror (const TDSCONTEXT * tds_ctx, TDSSOCKET * tds, int msgno, int errnum)
 	} else {
 		const static char msg[] = "tdserror: client library not called because either "
 					  "tds_ctx (%p) or tds_ctx->err_handler is NULL\n";
-		tdsdump_log(TDS_DBG_ERROR, msg, tds_ctx);
+	 	tdsdump_log(TDS_DBG_FUNC, msg, tds_ctx);
 	}
 
   
@@ -377,35 +377,6 @@ tdserror (const TDSCONTEXT * tds_ctx, TDSSOCKET * tds, int msgno, int errnum)
 	return rc;
 }
 
-/**
- * Copy a string of length len to a new allocated buffer
- * This function does not read more than len bytes
- * Please note that some system implementation of strndup
- * do not assure they don't read past len bytes as they
- * use still strlen to check length to copy limiting
- * after strlen to size passed
- * Also this function is different from strndup as it assume
- * that len bytes are valid
- * String returned is NUL terminated
- *
- * \param s   string to copy from
- * \param len length to copy
- *
- * \returns string copied or NULL if errors
- */
-char *
-tds_strndup(const void *s, TDS_INTPTR len)
-{
-	char *out;
 
-	if (len < 0)
-		return NULL;
 
-	out = tds_new(char, len + 1);
-	if (out) {
-		memcpy(out, s, len);
-		out[len] = 0;
-	}
-	return out;
-}
 

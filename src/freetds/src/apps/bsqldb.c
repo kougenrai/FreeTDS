@@ -17,7 +17,6 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#undef NDEBUG
 #include <config.h>
 
 #include <stdio.h>
@@ -70,17 +69,10 @@ static int get_printable_size(int type, int size);
 static void usage(const char invoked_as[]);
 
 struct METADATA { char *name, *format_string; const char *source; int type, size, width; };
-struct DATA { char *buffer; int status; };
-struct METACOMP { int numalts; struct METADATA *meta; struct DATA *data; };
 static int set_format_string(struct METADATA * meta, const char separator[]);
 
 
-typedef struct KEY_T
-{
-	size_t nkeys;
-	int *keys;
-} KEY_T;
-
+struct key_t { size_t nkeys; int *keys; };
 typedef struct _options 
 { 
 	int 	fverbose, 
@@ -96,7 +88,7 @@ typedef struct _options
 		*output_filename, 
 		*error_filename; 
 	struct pivot_t {
-		KEY_T row_key, col_key;
+		struct key_t row_key, col_key;
 		int val_col;
 		DBPIVOT_FUNC func;
 	} pivot;
@@ -252,10 +244,6 @@ next_query(DBPROCESS *dbproc)
 	while (fgets(query_line, sizeof(query_line), stdin)) {
 		/* 'go' or 'GO' separates command batches */
 		const char *p = query_line;
-
-		/* Skip past leading white spaces */
-		while (isspace((unsigned char) *p))
-			p++;
 		if (strncasecmp(p, "go", 2) == 0) {
 			for (p+=2; isspace((unsigned char) *p); p++) {
 				if (*p == '\n')
@@ -286,54 +274,6 @@ next_query(DBPROCESS *dbproc)
 }
 
 static void
-free_metadata(struct METADATA **pmetadata, int ncols)
-{
-	int c;
-	struct METADATA *metadata = *pmetadata;
-
-	if (!metadata) return;
-	for (c=0; c < ncols; c++) {
-		free(metadata[c].format_string);
-	}
-	free(metadata);
-	*pmetadata = NULL;
-}
-
-static void
-free_data(struct DATA **pdata, int ncols)
-{
-	int c;
-	struct DATA *data = *pdata;
-
-	if (!data) return;
-	for (c=0; c < ncols; c++) {
-		free(data[c].buffer);
-	}
-	free(data);
-	*pdata = NULL;
-}
-
-static void
-free_metacomp(struct METACOMP ***pmetacompute, int ncomputeids)
-{
-	int i, c;
-	struct METACOMP **metacompute = *pmetacompute;
-
-	if (!metacompute) return;
-	for (i=0; i < ncomputeids; i++) {
-		for (c=0; c < metacompute[i]->numalts; c++) {
-			free(metacompute[i]->meta[c].name);
-			free(metacompute[i]->meta[c].format_string);
-		}
-		free(metacompute[i]->meta);
-		free(metacompute[i]->data);
-		free(metacompute[i]);
-	}
-	free(metacompute);
-	*pmetacompute = NULL;
-}
-
-static void
 print_results(DBPROCESS *dbproc) 
 {
 	static const char empty_string[] = "";
@@ -344,9 +284,9 @@ print_results(DBPROCESS *dbproc)
 	
 	struct METADATA *metadata = NULL, return_status;
 	
-	struct DATA *data = NULL;
+	struct DATA { char *buffer; int status; } *data = NULL;
 	
-	struct METACOMP **metacompute = NULL;
+	struct METACOMP { int numalts; struct METADATA *meta; struct DATA *data; } **metacompute = NULL;
 	
 	RETCODE erc;
 	int row_code;
@@ -370,25 +310,38 @@ print_results(DBPROCESS *dbproc)
 	for (iresultset=1; (erc = dbresults(dbproc)) != NO_MORE_RESULTS; iresultset++) {
 		if (erc == FAIL) {
 			fprintf(stderr, "%s:%d: dbresults(), result set %d failed\n", options.appname, __LINE__, iresultset);
-			free_metadata(&metadata, ncols);
-			free_data(&data, ncols);
-			free_metacomp(&metacompute, ncomputeids);
 			return;
 		}
 		
 		if (options.pivot.func) {
-			const KEY_T *rk = &options.pivot.row_key, *ck = &options.pivot.col_key;
+			const struct key_t *rk = &options.pivot.row_key, *ck = &options.pivot.col_key;
 			erc = dbpivot(dbproc, rk->nkeys, rk->keys, ck->nkeys, ck->keys, 
 					options.pivot.func, options.pivot.val_col);
 		}
 		
 		fprintf(options.verbose, "Result set %d\n", iresultset);
 		/* Free prior allocations, if any. */
-		free_metadata(&metadata, ncols);
-		free_data(&data, ncols);
+		for (c=0; c < ncols; c++) {
+			free(metadata[c].format_string);
+			free(data[c].buffer);
+		}
+		free(metadata);
+		metadata = NULL;
+		free(data);
+		data = NULL;
 		ncols = 0;
-
-		free_metacomp(&metacompute, ncomputeids);
+		
+		for (i=0; i < ncomputeids; i++) {
+			for (c=0; c < metacompute[i]->numalts; c++) {
+				free(metacompute[i]->meta[c].name);
+				free(metacompute[i]->meta[c].format_string);
+			}
+			free(metacompute[i]->meta);
+			free(metacompute[i]->data);
+			free(metacompute[i]);
+		}
+		free(metacompute);
+		metacompute = NULL;
 		ncomputeids = 0;
 		
 		/* 
@@ -462,7 +415,7 @@ print_results(DBPROCESS *dbproc)
 			ret = set_format_string(&metadata[c], (c+1 < ncols)? options.colsep : "\n");
 			if (ret <= 0) {
 				fprintf(stderr, "%s:%d: asprintf(), column %d failed\n", options.appname, __LINE__, c+1);
-				exit(1);
+				return;
 			}
 
 			/* 
@@ -477,19 +430,19 @@ print_results(DBPROCESS *dbproc)
 			 */
 
 			if (metadata[c].width < INT_MAX) {
-				data[c].buffer = (char *) calloc(1, 1 + metadata[c].width); /* allow for null terminator */
+				data[c].buffer = calloc(1, 1 + metadata[c].width); /* allow for null terminator */
 				assert(data[c].buffer);
 
 				erc = dbbind(dbproc, c+1, bindtype, 0, (BYTE *) data[c].buffer);
 				if (erc == FAIL) {
 					fprintf(stderr, "%s:%d: dbbind(), column %d failed\n", options.appname, __LINE__, c+1);
-					exit(1);
+					return;
 				}
 
 				erc = dbnullbind(dbproc, c+1, &data[c].status);
 				if (erc == FAIL) {
 					fprintf(stderr, "%s:%d: dbnullbind(), column %d failed\n", options.appname, __LINE__, c+1);
-					exit(1);
+					return;
 				}
 			} else {
 				/* We don't bind text buffers, but use dbreadtext instead. */
@@ -527,7 +480,7 @@ print_results(DBPROCESS *dbproc)
 										(iby+1 < nby)? ", " : ")");
 					if (ret < 0) {
 						fprintf(options.verbose, "Insufficient room to create name for column %d:\n", 1+c);
-						exit(1);
+						break;
 					}
 					free(bynames);
 					bynames = s;
@@ -540,12 +493,9 @@ print_results(DBPROCESS *dbproc)
 					colname = metadata[--altcolid].name;
 				}
 
-				ret = asprintf(&metacompute[i]->meta[c].name, "%s(%s)", dbprtype(dbaltop(dbproc, i+1, c+1)), colname);
-				if (ret < 0) {
-					fprintf(stderr, "%s:%d: asprintf(), column %d failed\n", options.appname, __LINE__, c+1);
-					exit(1);
-				}
-
+				asprintf(&metacompute[i]->meta[c].name, "%s(%s)", dbprtype(dbaltop(dbproc, i+1, c+1)), colname);
+				assert(metacompute[i]->meta[c].name);
+					
 				metacompute[i]->meta[c].width = get_printable_size(metacompute[i]->meta[c].type, 
 										   metacompute[i]->meta[c].size);
 				if (metacompute[i]->meta[c].width < strlen(metacompute[i]->meta[c].name))
@@ -555,7 +505,7 @@ print_results(DBPROCESS *dbproc)
 				if (ret <= 0) {
 					free(bynames);
 					fprintf(stderr, "%s:%d: asprintf(), column %d failed\n", options.appname, __LINE__, c+1);
-					exit(1);
+					return;
 				}
 				
 				fprintf(options.verbose, "\tcolumn %d is %s, type %s, size %d %s\n", 
@@ -565,14 +515,14 @@ print_results(DBPROCESS *dbproc)
 	
 				/* allocate buffer */
 				assert(metacompute[i]->data);
-				metacompute[i]->data[c].buffer = (char *) calloc(1, metacompute[i]->meta[c].width);
+				metacompute[i]->data[c].buffer = calloc(1, metacompute[i]->meta[c].width);
 				assert(metacompute[i]->data[c].buffer);
 				
 				/* bind */
 				erc = dbaltbind(dbproc, i+1, c+1, bindtype, -1, (BYTE*) metacompute[i]->data[c].buffer);
 				if (erc == FAIL) {
 					fprintf(stderr, "%s:%d: dbaltbind(), column %d failed\n", options.appname, __LINE__, c+1);
-					exit(1);
+					return;
 				}
 			}
 		}
@@ -654,7 +604,7 @@ print_results(DBPROCESS *dbproc)
 					struct METADATA *meta = &metacompute[row_code-1]->meta[c];
 					
 					/* left justify the names */
-					strlcat(fmt, &meta->format_string[1], sizeof(fmt));
+					strcat(fmt, &meta->format_string[1]);
 					fprintf(options.headers, fmt, meta->name);
 				}
 
@@ -730,9 +680,6 @@ print_results(DBPROCESS *dbproc)
 		}
 	} /* wend dbresults */
 	fprintf(options.verbose, "%s:%d: dbresults() returned NO_MORE_RESULTS (%d):\n", options.appname, __LINE__, erc);
-	free_metadata(&metadata, ncols);
-	free_data(&data, ncols);
-	free_metacomp(&metacompute, ncomputeids);
 }
 
 static int
@@ -883,14 +830,14 @@ static void
 parse_pivot_description(OPTIONS *options, const char *optarg)
 {
 /**
-	KEY_T { size_t nkeys; int *keys; };
+	struct key_t { size_t nkeys; int *keys; };
 	struct pivot_t {
-		KEY_T row_key, col_key;
+		struct key_t row_key, col_key;
 		int val_col;
 		DBPIVOT_FUNC func;
 **/
 	char *p, *pend;
-	KEY_T *keys[2] = { &options->pivot.row_key, &options->pivot.col_key},**pk;
+	struct key_t *keys[2] = { &options->pivot.row_key, &options->pivot.col_key},**pk;
 	int nchars;
 	char ch, *input = strdup(optarg);
 	assert(input);
@@ -909,7 +856,7 @@ parse_pivot_description(OPTIONS *options, const char *optarg)
 			while((ncols = sscanf(p, "%u%c%n", &col, &ch, &nchars)) > 0) {
 				int *pi;
 				assert(ncols <= 2);
-				if ((pi = (int *) realloc((*pk)->keys, sizeof((*pk)->keys[0]) * ++((*pk)->nkeys))) == NULL) {
+				if ((pi = realloc((*pk)->keys, sizeof((*pk)->keys[0]) * ++((*pk)->nkeys))) == NULL) {
 					assert(pi);
 					return;
 				}
@@ -928,9 +875,7 @@ parse_pivot_description(OPTIONS *options, const char *optarg)
 		}
 	}
 	if (options->fverbose)
-		printf("found %lu row and %lu col keys\n",
-		       (unsigned long) options->pivot.row_key.nkeys,
-		       (unsigned long) options->pivot.col_key.nkeys);
+		printf("found %td row and %td col keys\n", options->pivot.row_key.nkeys, options->pivot.col_key.nkeys);
 
 	if ((pend = strchr(p, ' ')) == NULL) {
 		fprintf(stderr, "bsqldb(): no name in %s\n", p);
@@ -968,7 +913,7 @@ get_login(int argc, char *argv[], OPTIONS *options)
 
 	assert(options && argv);
 	
-	options->appname = basename(argv[0]);
+	options->appname = tds_basename(argv[0]);
 	options->colsep = default_colsep; /* may be overridden by -t */
 	
 	login = dblogin();
@@ -985,15 +930,13 @@ get_login(int argc, char *argv[], OPTIONS *options)
 	while ((ch = getopt(argc, argv, "U:P:R:S:d:D:i:o:e:t:H:hqv")) != -1) {
 		switch (ch) {
 		case 'U':
-			free(username);
 			username = strdup(optarg);
 			break;
 		case 'R': 
-			parse_pivot_description(options, optarg);
-			break;
+			  parse_pivot_description(options, optarg);
+			  break;
 		case 'P':
-			free(password);
-			password = tds_getpassarg(optarg);
+			password = getpassarg(optarg);
 			break;
 		case 'S':
 			options->servername = strdup(optarg);
@@ -1019,7 +962,7 @@ get_login(int argc, char *argv[], OPTIONS *options)
 			options->headers = stdout;
 			break;
 		case 'H':
-			strlcpy(options->hostname, optarg, sizeof(options->hostname));
+			strcpy(options->hostname, optarg);
 			break;
 		case 'q':
 			options->fquiet = 1;

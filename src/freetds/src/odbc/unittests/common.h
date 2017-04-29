@@ -66,8 +66,6 @@ void odbc_check_rows(int n, int line, const char * file);
 void odbc_reset_statement_proc(SQLHSTMT *stmt, const char *file, int line);
 #define odbc_reset_statement() odbc_reset_statement_proc(&odbc_stmt, __FILE__, __LINE__)
 void odbc_check_cursor(void);
-void odbc_check_no_row(const char *query);
-void odbc_test_skipped(void);
 
 #define ODBC_REPORT_ERROR(msg) odbc_report_error(msg, __LINE__, __FILE__)
 
@@ -186,13 +184,10 @@ void odbc_setenv(const char *name, const char *value, int overwrite);
 #define setenv odbc_setenv
 #endif
 
-void odbc_mark_sockets_opened(void);
-TDS_SYS_SOCKET odbc_find_last_socket(void);
+#ifndef _WIN32
+int odbc_find_last_socket(void);
+#endif
 
-/**
- * Converts an ODBC result into a string.
- * There is no check on destination length, use a buffer big enough.
- */
 void odbc_c2string(char *out, SQLSMALLINT out_c_type, const void *in, size_t in_len);
 
 int odbc_to_sqlwchar(SQLWCHAR *dst, const char *src, int n);

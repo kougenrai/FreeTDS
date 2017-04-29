@@ -61,6 +61,9 @@
 #include <sybdb.h>
 #include "freebcp.h"
 
+static char software_version[] = "$Id: freebcp.c,v 1.64 2011-10-14 22:49:34 berryc Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
+
 void pusage(void);
 int process_parameters(int, char **, struct pd *);
 static int unescape(char arg[]);
@@ -191,7 +194,7 @@ process_parameters(int argc, char **argv, BCPPARAMDATA *pdata)
 	}
 
 	/* argument 2 - the direction */
-	strlcpy(pdata->dbdirection, argv[2], sizeof(pdata->dbdirection));
+	tds_strlcpy(pdata->dbdirection, argv[2], sizeof(pdata->dbdirection));
 
 	if (strcasecmp(pdata->dbdirection, "in") == 0) {
 		pdata->direction = DB_IN;
@@ -216,7 +219,7 @@ process_parameters(int argc, char **argv, BCPPARAMDATA *pdata)
 		switch (ch) {
 		case 'v':
 		case 'V':
-			printf("freebcp version %s\n", TDS_VERSION_NO);
+			printf("freebcp version %s\n", software_version);
 			return FALSE;
 			break;
 		case 'm':
@@ -272,7 +275,7 @@ process_parameters(int argc, char **argv, BCPPARAMDATA *pdata)
 			break;
 		case 'P':
 			pdata->Pflag++;
-			pdata->pass = tds_getpassarg(optarg);
+			pdata->pass = getpassarg(optarg);
 			break;
 		case 'i':
 			free(pdata->inputfile);
@@ -504,8 +507,7 @@ file_character(BCPPARAMDATA * pdata, DBPROCESS * dbproc, DBINT dir)
 			return FALSE;
 		}
 
-		while (NO_MORE_RESULTS != dbresults(dbproc))
-			continue;
+		while (NO_MORE_RESULTS != dbresults(dbproc));
 	}
 
 	bcp_control(dbproc, BCPFIRST, pdata->firstrow);
@@ -602,8 +604,7 @@ file_native(BCPPARAMDATA * pdata, DBPROCESS * dbproc, DBINT dir)
 			return FALSE;
 		}
 
-		while (NO_MORE_RESULTS != dbresults(dbproc))
-			continue;
+		while (NO_MORE_RESULTS != dbresults(dbproc));
 	}
 
 	bcp_control(dbproc, BCPFIRST, pdata->firstrow);
@@ -663,8 +664,7 @@ file_formatted(BCPPARAMDATA * pdata, DBPROCESS * dbproc, DBINT dir)
 			return FALSE;
 		}
 
-		while (NO_MORE_RESULTS != dbresults(dbproc))
-			continue;
+		while (NO_MORE_RESULTS != dbresults(dbproc));
 	}
 
 	bcp_control(dbproc, BCPFIRST, pdata->firstrow);
@@ -689,8 +689,9 @@ file_formatted(BCPPARAMDATA * pdata, DBPROCESS * dbproc, DBINT dir)
 
 
 int
-setoptions(DBPROCESS * dbproc, BCPPARAMDATA * params)
-{
+setoptions(DBPROCESS * dbproc, BCPPARAMDATA * params){
+	FILE *optFile;
+	char optBuf[256];
 	RETCODE fOK;
 
 	if (dbfcmd(dbproc, "set textsize %d ", params->textsize) == FAIL) {
@@ -703,30 +704,26 @@ setoptions(DBPROCESS * dbproc, BCPPARAMDATA * params)
 	 * Else pass the option verbatim to the server.
 	 */
 	if (params->options) {
-		FILE *optFile;
-		char optBuf[256];
-
 		if ((optFile = fopen(params->options, "r")) == NULL) {
-			if (dbcmd(dbproc, params->options) == FAIL) {
+			if (dbfcmd(dbproc, params->options) == FAIL) {
 				fprintf(stderr, "setoptions() failed preparing options at %s:%d\n", __FILE__, __LINE__);
 				return FALSE;
 			}
 		} else {
 			while (fgets (optBuf, sizeof(optBuf), optFile) != NULL) {
-				if (dbcmd(dbproc, optBuf) == FAIL) {
+				if (dbfcmd(dbproc, optBuf) == FAIL) {
 					fprintf(stderr, "setoptions() failed preparing options at %s:%d\n", __FILE__, __LINE__);
-					fclose(optFile);
 					return FALSE;
 				}
 			}
 			if (!feof (optFile)) {
 				perror("freebcp");
         			fprintf(stderr, "error reading options file \"%s\" at %s:%d\n", params->options, __FILE__, __LINE__);
-				fclose(optFile);
 				return FALSE;
 			}
 			fclose(optFile);
 		}
+	
 	}
 	
 	if (dbsqlexec(dbproc) == FAIL) {
@@ -735,8 +732,7 @@ setoptions(DBPROCESS * dbproc, BCPPARAMDATA * params)
 	}
 	
 	while ((fOK = dbresults(dbproc)) == SUCCEED) {
-		while ((fOK = dbnextrow(dbproc)) == REG_ROW)
-			continue;
+		while ((fOK = dbnextrow(dbproc)) == REG_ROW);
 		if (fOK == FAIL) {
 			fprintf(stderr, "setoptions() failed sending options at %s:%d\n", __FILE__, __LINE__);
 			return FALSE;

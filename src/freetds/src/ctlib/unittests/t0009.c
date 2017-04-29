@@ -8,8 +8,8 @@
 #include <ctpublic.h>
 #include "common.h"
 
-static CS_RETCODE ex_servermsg_cb(CS_CONTEXT * context, CS_CONNECTION * connection, CS_SERVERMSG * errmsg);
-static int compute_supported = 1;
+static char software_version[] = "$Id: t0009.c,v 1.13 2011-05-16 08:51:40 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
 
 /* Testing: Retrieve compute results */
 int
@@ -38,8 +38,6 @@ main(int argc, char *argv[])
 
 	CS_INT compute_col1;
 	CS_CHAR compute_col3[32];
-
-	unsigned rows[3] = { 0, 0, 0 };
 
 	fprintf(stdout, "%s: Retrieve compute results processing\n", __FILE__);
 	if (verbose) {
@@ -93,19 +91,13 @@ main(int argc, char *argv[])
 		return 1;
 	}
 
-	ct_callback(ctx, NULL, CS_SET, CS_SERVERMSG_CB, (CS_VOID *) ex_servermsg_cb);
 	while ((results_ret = ct_results(cmd, &result_type)) == CS_SUCCEED) {
-		printf("ct_results returned %s type\n", res_type_str(result_type));
 		switch ((int) result_type) {
 		case CS_CMD_SUCCEED:
 			break;
 		case CS_CMD_DONE:
 			break;
 		case CS_CMD_FAIL:
-			if (!compute_supported) {
-				try_ctlogout(ctx, conn, cmd, verbose);
-				return 0;
-			}
 			fprintf(stderr, "ct_results() result_type CS_CMD_FAIL.\n");
 			return 1;
 		case CS_ROW_RESULT:
@@ -173,7 +165,6 @@ main(int argc, char *argv[])
 					return 1;
 				} else {	/* ret == CS_SUCCEED */
 					fprintf(stdout, "col1 = %d col2= '%s', col3 = '%s'\n", col1, col2, col3);
-					++rows[0];
 				}
 			}
 
@@ -285,7 +276,6 @@ main(int argc, char *argv[])
 							return 1;
 						}
 					}
-					++rows[compute_id];
 				}
 			}
 
@@ -319,12 +309,6 @@ main(int argc, char *argv[])
 		return 1;
 	}
 
-	if (rows[0] != 5 || rows[1] != 2 || rows[2] != 1) {
-		fprintf(stderr, "wrong number of rows: normal %u compute_1 %u compute_2 %u, expected 5 2 1\n",
-			rows[0], rows[1], rows[2]);
-		return 1;
-	}
-
 	if (verbose) {
 		fprintf(stdout, "Trying logout\n");
 	}
@@ -335,15 +319,4 @@ main(int argc, char *argv[])
 	}
 
 	return 0;
-}
-
-static CS_RETCODE
-ex_servermsg_cb(CS_CONTEXT * context, CS_CONNECTION * connection, CS_SERVERMSG * srvmsg)
-{
-	if (strstr(srvmsg->text, "compute")) {
-		compute_supported = 0;
-		printf("Server does not support compute\n");
-		return CS_SUCCEED;
-	}
-	return servermsg_cb(context, connection, srvmsg);
 }

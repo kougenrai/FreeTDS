@@ -27,6 +27,9 @@
 #include <freetds/tds.h>
 #include <freetds/server.h>
 
+static char software_version[] = "$Id: query.c,v 1.20 2011-07-27 16:32:42 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
+
 static char *query;
 static size_t query_buflen = 0;
 
@@ -40,7 +43,7 @@ tds_get_query(TDSSOCKET * tds)
 
 	if (query_buflen == 0) {
 		query_buflen = 1024;
-		query = tds_new(char, query_buflen);
+		query = (char *) malloc(query_buflen);
 	}
 	tds_get_byte(tds);	/* 33 */
 	len = tds_get_int(tds);	/* query size +1 */

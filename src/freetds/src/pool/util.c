@@ -21,26 +21,47 @@
 
 #include <stdarg.h>
 #include <stdio.h>
-#include <assert.h>
 
 #if HAVE_STDLIB_H
 #include <stdlib.h>
 #endif /* HAVE_STDLIB_H */
 
-#if HAVE_UNISTD_H
-#include <unistd.h>
-#endif /* HAVE_UNISTD_H */
-
-#if HAVE_ERRNO_H
-#include <errno.h>
-#endif /* HAVE_ERRNO_H */
-
 #include <ctype.h>
 
 #include "pool.h"
 #include <freetds/string.h>
-#include <freetds/checks.h>
-#include <freetds/bytes.h>
+
+static char software_version[] = "$Id: util.c,v 1.15 2011-05-16 08:51:40 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
+
+void
+dump_buf(const void *buf, int length)
+{
+	int i;
+	int j;
+	const int bytesPerLine = 16;
+	const unsigned char *data = (const unsigned char *) buf;
+
+	for (i = 0; i < length; i += bytesPerLine) {
+		fprintf(stderr, "%04x  ", i);
+
+		for (j = i; j < length && (j - i) < bytesPerLine; j++) {
+			fprintf(stderr, "%02x ", data[j]);
+		}
+
+		for (; 0 != (j % bytesPerLine); j++) {
+			fprintf(stderr, "   ");
+		}
+		fprintf(stderr, "  |");
+
+		for (j = i; j < length && (j - i) < bytesPerLine; j++) {
+			fprintf(stderr, "%c", (isprint(data[j])) ? data[j] : '.');
+		}
+
+		fprintf(stderr, "|\n");
+	}
+	fprintf(stderr, "\n");
+}
 
 void
 dump_login(TDSLOGIN * login)
@@ -57,145 +78,12 @@ dump_login(TDSLOGIN * login)
 	fprintf(stderr, "bsiz %d\n", login->block_size);
 }
 
-/**
- * Read part of packet. Function does not block.
- * @return true if packet is not complete and we must call again,
- *         false on full packet or error.
- */
-bool
-pool_packet_read(TDSSOCKET *tds)
-{
-	int packet_len;
-	int readed, err;
-
-	tdsdump_log(TDS_DBG_INFO1, "tds in_len %d in_pos %d\n", tds->in_len, tds->in_pos);
-
-	// TODO MARS
-
-	/* determine packet size */
-	packet_len = tds->in_len >= 4 ? TDS_GET_A2BE(&tds->in_buf[2]) : 8;
-	if (TDS_UNLIKELY(packet_len < 8)) {
-		tds->in_len = 0;
-		return false;
-	}
-
-	/* get another packet */
-	if (tds->in_len >= packet_len) {
-		/* packet was not fully forwarded */
-		if (tds->in_pos < tds->in_len)
-			return false;
-		tds->in_pos = 0;
-		tds->in_len = 0;
-	}
-
-	for (;;) {
-		/* determine packet size */
-		packet_len = 8;
-		if (tds->in_len >= 4) {
-			packet_len = TDS_GET_A2BE(&tds->in_buf[2]);
-			if (packet_len < 8)
-				break;
-			tdsdump_log(TDS_DBG_INFO1, "packet_len %d in_len %d\n", packet_len, tds->in_len);
-			/* resize packet if not enough */
-			if (packet_len > tds->recv_packet->capacity) {
-				TDSPACKET *packet;
-
-				packet = tds_realloc_packet(tds->recv_packet, packet_len);
-				if (!packet)
-					break;
-				tds->in_buf = packet->buf;
-				tds->recv_packet = packet;
-			}
-			CHECK_TDS_EXTRA(tds);
-			if (tds->in_len >= packet_len)
-				return false;
-		}
-
-		assert(packet_len > tds->in_len);
-		assert(packet_len <= tds->recv_packet->capacity);
-		assert(tds->in_len < tds->recv_packet->capacity);
-
-		readed = read(tds_get_s(tds), &tds->in_buf[tds->in_len], packet_len - tds->in_len);
-		tdsdump_log(TDS_DBG_INFO1, "readed %d\n", readed);
-
-		/* socket closed */
-		if (readed == 0)
-			break;
-
-		/* error */
-		if (readed < 0) {
-			err = sock_errno;
-			if (err == EINTR)
-				continue;
-			if (TDSSOCK_WOULDBLOCK(err))
-				return true;
-			break;
-		}
-
-		/* got some data */
-		tds->in_len += readed;
-	}
-
-	/* failure */
-	tds->in_len = 0;
-	return false;
-}
-
-int
-pool_write(TDS_SYS_SOCKET sock, const void *buf, size_t len)
-{
-	int ret;
-	const unsigned char *p = (const unsigned char *) buf;
-
-	while (len) {
-		ret = WRITESOCKET(sock, p, len);
-		if (ret <= 0) {
-			int err = errno;
-			if (TDSSOCK_WOULDBLOCK(err) || err == EINTR)
-				break;
-			return -1;
-		}
-		p   += ret;
-		len -= ret;
-	}
-	return p - (const unsigned char *) buf;
-}
-
 void
-pool_event_add(TDS_POOL *pool, TDS_POOL_EVENT *ev, TDS_POOL_EXECUTE execute)
+die_if(int expr, const char *msg)
 {
-	tds_mutex_lock(&pool->events_mtx);
-	ev->execute = execute;
-	ev->next = pool->events;
-	pool->events = ev;
-	tds_mutex_unlock(&pool->events_mtx);
-	WRITESOCKET(pool->event_fd, "x", 1);
-}
-
-bool
-pool_write_data(TDS_POOL_SOCKET *from, TDS_POOL_SOCKET *to)
-{
-	int ret;
-	TDSSOCKET *tds;
-
-	tdsdump_log(TDS_DBG_INFO1, "trying to send\n");
-
-	tds = from->tds;
-	tdsdump_log(TDS_DBG_INFO1, "sending %d bytes\n", tds->in_len);
-	/* cf. net.c for better technique.  */
-	ret = pool_write(tds_get_s(to->tds), tds->in_buf + tds->in_pos, tds->in_len - tds->in_pos);
-	/* write failed, cleanup member */
-	if (ret < 0)
-		return false;
-
-	tds->in_pos += ret;
-	if (tds->in_pos < tds->in_len) {
-		/* partial write, schedule a future write */
-		to->poll_send = true;
-		from->poll_recv = false;
-	} else {
-		to->poll_send = false;
-		from->poll_recv = true;
+	if (expr) {
+		fprintf(stderr, "%s\n", msg);
+		fprintf(stderr, "tdspool aborting!\n");
+		exit(1);
 	}
-	return true;
 }

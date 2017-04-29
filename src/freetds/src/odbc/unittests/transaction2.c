@@ -3,12 +3,15 @@
 
 /* Test transaction types */
 
+static char software_version[] = "$Id: transaction2.c,v 1.11 2011-07-12 10:16:59 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
+
 static void
 ReadErrorConn(void)
 {
 	ODBC_BUF *odbc_buf = NULL;
-	SQLTCHAR *err = (SQLTCHAR *) ODBC_GET(sizeof(odbc_err)*sizeof(SQLTCHAR));
-	SQLTCHAR *state = (SQLTCHAR *) ODBC_GET(sizeof(odbc_sqlstate)*sizeof(SQLTCHAR));
+	SQLTCHAR *err = ODBC_GET(sizeof(odbc_err)*sizeof(SQLTCHAR));
+	SQLTCHAR *state = ODBC_GET(sizeof(odbc_sqlstate)*sizeof(SQLTCHAR));
 
 	memset(odbc_err, 0, sizeof(odbc_err));
 	memset(odbc_sqlstate, 0, sizeof(odbc_sqlstate));

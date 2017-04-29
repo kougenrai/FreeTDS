@@ -55,7 +55,11 @@
 
 #define TDS_FIND(k,b,c) tds_find(k, b, sizeof(b)/sizeof(b[0]), sizeof(b[0]), c)
 
-typedef bool (*compare_func)(const void *, const void *);
+/* avoid conflicts */
+#define boolean TDS_boolean
+typedef enum { false, true } boolean;
+
+typedef boolean (*compare_func)(const void *, const void *);
 
 static void *
 tds_find(const void *key, const void *base, size_t nelem, size_t width,
@@ -74,8 +78,8 @@ tds_find(const void *key, const void *base, size_t nelem, size_t width,
 
 struct col_t
 {
+	int type;
 	size_t len;
-	TDS_SERVER_TYPE type;
 	int null_indicator;
 	char *s;
 	union {
@@ -84,10 +88,10 @@ struct col_t
 		DBINT		i;
 		DBREAL		r;
 		DBFLT8		f;
-	} data;
+	};
 };
 
-static TDS_SERVER_TYPE infer_col_type(int sybtype);
+static int infer_col_type(int sybtype);
 
 static struct col_t *
 col_init(struct col_t *pcol, int sybtype, int collen) 
@@ -95,8 +99,6 @@ col_init(struct col_t *pcol, int sybtype, int collen)
 	assert(pcol);
 	
 	pcol->type = infer_col_type(sybtype);
-	if (pcol->type == TDS_INVALID_TYPE)
-		return NULL;
 	pcol->len = collen;
 
 	switch(sybtype) {
@@ -112,7 +114,7 @@ col_init(struct col_t *pcol, int sybtype, int collen)
 	case SYBTEXT:
 	case SYBNTEXT:
 		pcol->len = collen;
-		if ((pcol->s = tds_new(char, 1+collen)) == NULL) {
+		if ((pcol->s = malloc(1+collen)) == NULL) {
 			return NULL;
 		}
 		break;
@@ -127,7 +129,7 @@ col_free(struct col_t *p)
 	memset(p, 0, sizeof(*p));
 }
 
-static bool
+static boolean 
 col_equal(const struct col_t *pc1, const struct col_t *pc2)
 {
 	assert( pc1 && pc2 );
@@ -141,15 +143,15 @@ col_equal(const struct col_t *pc1, const struct col_t *pc2)
 			return false;
 		return strncmp(pc1->s, pc2->s, pc1->len) == 0? true : false;
 	case SYBINT1:
-		return pc1->data.ti == pc2->data.ti? true : false;
+		return pc1->ti == pc2->ti? true : false;
 	case SYBINT2:
-		return pc1->data.si == pc2->data.si? true : false;
+		return pc1->si == pc2->si? true : false;
 	case SYBINT4:
-		return pc1->data.i == pc2->data.i? true : false;
+		return pc1->i == pc2->i? true : false;
 	case SYBFLT8:
-		return pc1->data.f == pc2->data.f? true : false;
+		return pc1->f == pc2->f? true : false;
 	case SYBREAL:
-		return pc1->data.r == pc2->data.r? true : false;
+		return pc1->r == pc2->r? true : false;
 
 	case SYBINTN:
 	case SYBDATETIME:
@@ -184,15 +186,15 @@ col_buffer(struct col_t *pcol)
 	case SYBVARCHAR:
 		return pcol->s;
 	case SYBINT1:
-		return &pcol->data.ti;
+		return &pcol->ti;
 	case SYBINT2:
-		return &pcol->data.si;
+		return &pcol->si;
 	case SYBINT4:
-		return &pcol->data.i;
+		return &pcol->i;
 	case SYBFLT8:
-		return &pcol->data.f;
+		return &pcol->f;
 	case SYBREAL:
-		return &pcol->data.r;
+		return &pcol->r;
 
 	case SYBINTN:
 	case SYBDATETIME:
@@ -275,7 +277,7 @@ col_cpy(struct col_t *pdest, const struct col_t *psrc)
 	
 	if (psrc->s) {
 		assert(psrc->len >= 0);
-		if ((pdest->s = tds_new(char, psrc->len)) == NULL)
+		if ((pdest->s = malloc(psrc->len)) == NULL)
 			return NULL;
 		memcpy(pdest->s, psrc->s, psrc->len);
 	}
@@ -284,7 +286,7 @@ col_cpy(struct col_t *pdest, const struct col_t *psrc)
 	return pdest;
 }
 
-static bool
+static boolean
 col_null( const struct col_t *pcol )
 {
 	assert(pcol);
@@ -300,25 +302,25 @@ string_value(const struct col_t *pcol)
 	switch(pcol->type) {
 	case SYBCHAR:
 	case SYBVARCHAR:
-		if ((output = tds_new0(char, 1 + pcol->len)) == NULL)
+		if ((output = calloc(1, 1 + pcol->len)) == NULL)
 			return NULL;
 		strncpy(output, pcol->s, pcol->len);
 		return output;
 		break;
 	case SYBINT1:
-		len = asprintf(&output, "%d", (int)pcol->data.ti);
+		len = asprintf(&output, "%d", (int)pcol->ti);
 		break;
 	case SYBINT2:
-		len = asprintf(&output, "%d", (int)pcol->data.si);
+		len = asprintf(&output, "%d", (int)pcol->si);
 		break;
 	case SYBINT4:
-		len = asprintf(&output, "%d", (int)pcol->data.i);
+		len = asprintf(&output, "%d", (int)pcol->i);
 		break;
 	case SYBFLT8:
-		len = asprintf(&output, "%f", pcol->data.f);
+		len = asprintf(&output, "%f", pcol->f);
 		break;
 	case SYBREAL:
-		len = asprintf(&output, "%f", (double)pcol->data.r);
+		len = asprintf(&output, "%f", (double)pcol->r);
 		break;
 
 	default:
@@ -360,7 +362,7 @@ join(int argc, char *argv[], const char sep[])
 	
 	len += 1 + argc * strlen(sep); /* allows one too many */ 
 	
-	output = tds_new0(char, len);
+	output = calloc(1, len);
 	
 	for (p=argv; p < argv + argc; p++) {
 		if (p != argv)
@@ -370,7 +372,7 @@ join(int argc, char *argv[], const char sep[])
 	return output;
 }
 
-static TDS_SERVER_TYPE
+static int
 infer_col_type(int sybtype) 
 {
 	switch(sybtype) {
@@ -410,7 +412,7 @@ infer_col_type(int sybtype)
 		assert( false && sybtype );
 		break;
 	}
-	return TDS_INVALID_TYPE;
+	return 0;
 }
 
 static int
@@ -455,23 +457,20 @@ bind_type(int sybtype)
 	return 0;
 }
 
-typedef struct KEY_T
-{
-	int nkeys;
-	struct col_t *keys;
-} KEY_T;
+struct key_t { int nkeys; struct col_t *keys; }; 
 
-static bool
-key_equal(const KEY_T *a, const KEY_T *b)
+static boolean
+key_equal(const void *a, const void *b)
 {
+	const struct key_t *p1 = a, *p2 = b;
 	int i;
 	
 	assert(a && b);
-	assert(a->keys && b->keys);
-	assert(a->nkeys == b->nkeys);
+	assert(p1->keys && p2->keys);
+	assert(p1->nkeys == p2->nkeys);
 	
-	for (i=0; i < a->nkeys; i++) {
-		if (! col_equal(a->keys+i, b->keys+i))
+	for( i=0; i < p1->nkeys; i++ ) {
+		if (! col_equal(p1->keys+i, p2->keys+i))
 			return false;
 	}
 	return true;
@@ -479,21 +478,21 @@ key_equal(const KEY_T *a, const KEY_T *b)
 
 
 static void
-key_free(KEY_T *p)
+key_free(struct key_t *p)
 {
 	col_free(p->keys);
 	free(p->keys);
 	memset(p, 0, sizeof(*p));
 }
 
-static KEY_T *
-key_cpy(KEY_T *pdest, const KEY_T *psrc)
+static struct key_t *
+key_cpy(struct key_t *pdest, const struct key_t *psrc)
 {
 	int i;
 	
 	assert( pdest && psrc );
 	
-	if ((pdest->keys = tds_new0(struct col_t, psrc->nkeys)) == NULL)
+	if ((pdest->keys = calloc(psrc->nkeys, sizeof(*pdest->keys))) == NULL)
 		return NULL;
 
 	pdest->nkeys = psrc->nkeys;
@@ -508,7 +507,7 @@ key_cpy(KEY_T *pdest, const KEY_T *psrc)
 
 
 static char *
-make_col_name(const KEY_T *k)
+make_col_name(const struct key_t *k)
 {
 	const struct col_t *pc;
 	char **names, **s, *output;
@@ -517,7 +516,7 @@ make_col_name(const KEY_T *k)
 	assert(k->nkeys);
 	assert(k->keys);
 	
-	s = names = tds_new0(char *, k->nkeys);
+	s = names = calloc(k->nkeys, sizeof(char*));
 	
 	for(pc=k->keys; pc < k->keys + k->nkeys; pc++) {
 		*s++ = strdup(string_value(pc));
@@ -534,18 +533,14 @@ make_col_name(const KEY_T *k)
 }
 	
 
-typedef struct agg_t
-{
-	KEY_T row_key, col_key;
-	struct col_t value;
-} AGG_T;
+struct agg_t { struct key_t row_key, col_key; struct col_t value; }; 
 
 #if 0
-static bool
+static boolean
 agg_key_equal(const void *a, const void *b)
 {
 	int i;
-	const AGG_T *p1 = a, *p2 = b;
+	const struct agg_t *p1 = a, *p2 = b;
 	
 	assert(p1 && p2);
 	assert(p1->row_key.keys  && p2->row_key.keys);
@@ -560,11 +555,12 @@ agg_key_equal(const void *a, const void *b)
 }
 #endif
 
-static bool
-agg_next(const AGG_T *p1, const AGG_T *p2)
+static boolean
+agg_next(const void *a, const void *b)
 {
 	int i;
-
+	const struct agg_t *p1 = a, *p2 = b;
+	
 	assert(p1 && p2);
 	
 	if (p1->row_key.keys == NULL || p2->row_key.keys == NULL)
@@ -602,19 +598,20 @@ agg_next(const AGG_T *p1, const AGG_T *p2)
 }
 
 static void
-agg_free(AGG_T *p)
+agg_free(struct agg_t *p)
 {
 	key_free(&p->row_key);
 	key_free(&p->col_key);
 	col_free(&p->value);
 }
 
-static bool
-agg_equal(const AGG_T *p1, const AGG_T *p2)
+static boolean
+agg_equal(const void *agg_t1, const void *agg_t2)
 {
+	const struct agg_t *p1 = agg_t1, *p2 = agg_t2;
 	int i;
 	
-	assert(p1 && p2);
+	assert(agg_t1 && agg_t2);
 	assert(p1->row_key.keys && p1->col_key.keys);
 	assert(p2->row_key.keys && p2->col_key.keys);
 
@@ -703,10 +700,10 @@ set_result_column(TDSSOCKET * tds, TDSCOLUMN * curcol, const char name[], const 
 	return TDS_SUCCESS;
 }
 
-struct metadata_t { KEY_T *pacross; char *name; struct col_t col; };
+struct metadata_t { struct key_t *pacross; char *name; struct col_t col; };
 
 
-static bool
+static boolean
 reinit_results(TDSSOCKET * tds, size_t num_cols, const struct metadata_t meta[])
 {
 	TDSRESULTINFO *info;
@@ -761,44 +758,45 @@ reinit_results(TDSSOCKET * tds, size_t num_cols, const struct metadata_t meta[])
 	return true;
 }
 
-typedef struct pivot_t
+struct pivot_t
 {
 	DBPROCESS *dbproc;
 	STATUS status;
 	DB_RESULT_STATE dbresults_state;
 	
-	AGG_T *output;
-	KEY_T *across;
+	struct agg_t *output;
+	struct key_t *across;
 	size_t nout, nacross;
-} PIVOT_T;
+};
 
-static bool
-pivot_key_equal(const PIVOT_T *a, const PIVOT_T *b)
+static boolean 
+pivot_key_equal(const void *a, const void *b)
 {
+	const struct pivot_t *pa = a, *pb = b;
 	assert(a && b);
 	
-	return a->dbproc == b->dbproc? true : false;
+	return pa->dbproc == pb->dbproc? true : false;
 }
 
-static PIVOT_T *pivots = NULL;
+static struct pivot_t *pivots = NULL;
 static size_t npivots = 0;
 
-PIVOT_T *
+struct pivot_t *
 dbrows_pivoted(DBPROCESS *dbproc)
 {
-	PIVOT_T P;
+	struct pivot_t P;
 
 	assert(dbproc);
 	P.dbproc = dbproc;
 	
-	return (PIVOT_T *) tds_find(&P, pivots, npivots, sizeof(*pivots), (compare_func) pivot_key_equal);
+	return tds_find(&P, pivots, npivots, sizeof(*pivots), pivot_key_equal); 
 }
 
 STATUS
-dbnextrow_pivoted(DBPROCESS *dbproc, PIVOT_T *pp)
+dbnextrow_pivoted(DBPROCESS *dbproc, struct pivot_t *pp)
 {
 	int i;
-	AGG_T candidate, *pout;
+	struct agg_t candidate, *pout;
 
 	assert(pp);
 	assert(dbproc && dbproc->tds_socket);
@@ -840,10 +838,10 @@ dbnextrow_pivoted(DBPROCESS *dbproc, PIVOT_T *pp)
 		if (pcol->bcp_terminator == NULL) { /* not a cross-tab column */
 			pval = &candidate.row_key.keys[i];
 		} else {
-			AGG_T *pcan;
-			key_cpy(&candidate.col_key, (KEY_T *) pcol->bcp_terminator);
+			struct agg_t *pcan;
+			key_cpy(&candidate.col_key, (struct key_t *) pcol->bcp_terminator);
 			if ((pcan = tds_find(&candidate, pout, pp->output + pp->nout - pout, 
-						sizeof(*pp->output), (compare_func) agg_next)) != NULL) {
+						sizeof(*pp->output), agg_next)) != NULL) {
 				/* flag this output as used */
 				pout->row_key.keys = NULL;
 				pval = &pcan->value;
@@ -907,15 +905,15 @@ RETCODE
 dbpivot(DBPROCESS *dbproc, int nkeys, int *keys, int ncols, int *cols, DBPIVOT_FUNC func, int val)
 {
 	enum { logalot = 1 };
-	PIVOT_T P, *pp;
-	AGG_T input, *pout = NULL;
+	struct pivot_t P, *pp;
+	struct agg_t input, *pout = NULL;
 	struct metadata_t *metadata, *pmeta;
 	size_t i, nmeta = 0;
 
 	tdsdump_log(TDS_DBG_FUNC, "dbpivot(%p, %d,%p, %d,%p, %p, %d)\n", dbproc, nkeys, keys, ncols, cols, func, val);
 	if (logalot) {
 		char buffer[1024] = {'\0'}, *s = buffer;
-		const static char *const names[2] = { "\tkeys (down)", "\n\tcols (across)" };
+		const static char *names[2] = { "\tkeys (down)", "\n\tcols (across)" };
 		int *p = keys, *pend = p + nkeys;
 		
 		for (i=0; i < 2; i++) {
@@ -935,7 +933,7 @@ dbpivot(DBPROCESS *dbproc, int nkeys, int *keys, int ncols, int *cols, DBPIVOT_F
 	memset(&input,  0, sizeof(input));
 	
 	P.dbproc = dbproc;
-	if ((pp = tds_find(&P, pivots, npivots, sizeof(*pivots), (compare_func) pivot_key_equal)) == NULL ) {
+	if ((pp = tds_find(&P, pivots, npivots, sizeof(*pivots), pivot_key_equal)) == NULL ) {
 		pp = TDS_RESIZE(pivots, 1 + npivots);
 		if (!pp)
 			return FAIL;
@@ -946,7 +944,7 @@ dbpivot(DBPROCESS *dbproc, int nkeys, int *keys, int ncols, int *cols, DBPIVOT_F
 	}
 	memset(pp, 0, sizeof(*pp));
 
-	if ((input.row_key.keys = tds_new0(struct col_t, nkeys)) == NULL)
+	if ((input.row_key.keys = calloc(nkeys, sizeof(*input.row_key.keys))) == NULL)
 		return FAIL;
 	input.row_key.nkeys = nkeys;
 	for (i=0; i < nkeys; i++) {
@@ -954,15 +952,14 @@ dbpivot(DBPROCESS *dbproc, int nkeys, int *keys, int ncols, int *cols, DBPIVOT_F
 		int len = dbcollen(dbproc, keys[i]);
 		assert(type && len);
 		
-		if (!col_init(input.row_key.keys+i, type, len))
-			return FAIL;
+		col_init(input.row_key.keys+i, type, len);
 		if (FAIL == dbbind(dbproc, keys[i], bind_type(type), input.row_key.keys[i].len, col_buffer(input.row_key.keys+i)))
 			return FAIL;
 		if (FAIL == dbnullbind(dbproc, keys[i], &input.row_key.keys[i].null_indicator))
 			return FAIL;
 	}
 	
-	if ((input.col_key.keys = tds_new0(struct col_t, ncols)) == NULL)
+	if ((input.col_key.keys = calloc(ncols, sizeof(*input.col_key.keys))) == NULL)
 		return FAIL;
 	input.col_key.nkeys = ncols;
 	for (i=0; i < ncols; i++) {
@@ -970,8 +967,7 @@ dbpivot(DBPROCESS *dbproc, int nkeys, int *keys, int ncols, int *cols, DBPIVOT_F
 		int len = dbcollen(dbproc, cols[i]);
 		assert(type && len);
 		
-		if (!col_init(input.col_key.keys+i, type, len))
-			return FAIL;
+		col_init(input.col_key.keys+i, type, len);
 		if (FAIL == dbbind(dbproc, cols[i], bind_type(type), input.col_key.keys[i].len, col_buffer(input.col_key.keys+i)))
 			return FAIL;
 		if (FAIL == dbnullbind(dbproc, cols[i], &input.col_key.keys[i].null_indicator))
@@ -983,8 +979,7 @@ dbpivot(DBPROCESS *dbproc, int nkeys, int *keys, int ncols, int *cols, DBPIVOT_F
 		int len = dbcollen(dbproc, val);
 		assert(type && len);
 		
-		if (!col_init(&input.value, type, len))
-			return FAIL;
+		col_init(&input.value, type, len);
 		if (FAIL == dbbind(dbproc, val, bind_type(type), input.value.len, col_buffer(&input.value)))
 			return FAIL;
 		if (FAIL == dbnullbind(dbproc, val, &input.value.null_indicator))
@@ -993,29 +988,28 @@ dbpivot(DBPROCESS *dbproc, int nkeys, int *keys, int ncols, int *cols, DBPIVOT_F
 	
 	while ((pp->status = dbnextrow(dbproc)) == REG_ROW) {
 		/* add to unique list of crosstab columns */
-		if (tds_find(&input.col_key, pp->across, pp->nacross, sizeof(*pp->across), (compare_func) key_equal) == NULL) {
+		if (tds_find(&input.col_key, pp->across, pp->nacross, sizeof(*pp->across), key_equal) == NULL) {
 			if (!TDS_RESIZE(pp->across, 1 + pp->nacross))
 				return FAIL;
 			key_cpy(pp->across + pp->nacross, &input.col_key);
 		}
 		assert(pp->across);
 		
-		if ((pout = tds_find(&input, pp->output, pp->nout, sizeof(*pp->output), (compare_func) agg_equal)) == NULL ) {
+		if ((pout = tds_find(&input, pp->output, pp->nout, sizeof(*pp->output), agg_equal)) == NULL ) {
 			if (!TDS_RESIZE(pp->output, 1 + pp->nout))
 				return FAIL;
 			pout = pp->output + pp->nout++;
 
 			
-			if ((pout->row_key.keys = tds_new0(struct col_t, input.row_key.nkeys)) == NULL)
+			if ((pout->row_key.keys = calloc(input.row_key.nkeys, sizeof(*pout->row_key.keys))) == NULL)
 				return FAIL;
 			key_cpy(&pout->row_key, &input.row_key);
 
-			if ((pout->col_key.keys = tds_new0(struct col_t, input.col_key.nkeys)) == NULL)
+			if ((pout->col_key.keys = calloc(input.col_key.nkeys, sizeof(*pout->col_key.keys))) == NULL)
 				return FAIL;
 			key_cpy(&pout->col_key, &input.col_key);
 
-			if (!col_init(&pout->value, input.value.type, input.value.len))
-				return FAIL;
+			col_init(&pout->value, input.value.type, input.value.len);
 		}
 		
 		func(&pout->value, &input.value);
@@ -1031,7 +1025,7 @@ dbpivot(DBPROCESS *dbproc, int nkeys, int *keys, int ncols, int *cols, DBPIVOT_F
 	 * Initialize new metadata
 	 */
 	nmeta = input.row_key.nkeys + pp->nacross;	
-	metadata = tds_new0(struct metadata_t, nmeta);
+	metadata = calloc(nmeta, sizeof(*metadata));
 	
 	assert(pp->across || pp->nacross == 0);
 	
@@ -1046,8 +1040,7 @@ dbpivot(DBPROCESS *dbproc, int nkeys, int *keys, int ncols, int *cols, DBPIVOT_F
 	/* pivoted columms are found in the "across" data */
 	for (i=0, pmeta = metadata + input.row_key.nkeys; i < pp->nacross; i++) {
 		struct col_t col;
-		if (!col_init(&col, SYBFLT8, sizeof(double)))
-			return FAIL;
+		col_init(&col, SYBFLT8, sizeof(double));
 		assert(pmeta + i < metadata + nmeta);
 		pmeta[i].name = make_col_name(pp->across+i);
 		assert(pp->across);
@@ -1089,7 +1082,7 @@ dbpivot_count (struct col_t *tgt, const struct col_t *src)
 	tgt->type = SYBINT4;
 	
 	if (! col_null(src))
-		tgt->data.i++;
+		tgt->i++;
 }
 
 void
@@ -1105,19 +1098,19 @@ dbpivot_sum (struct col_t *tgt, const struct col_t *src)
 
 	switch (src->type) {
 	case SYBINT1:
-		tgt->data.ti += src->data.ti;
+		tgt->ti += src->ti;
 		break;
 	case SYBINT2:
-		tgt->data.si += src->data.si;
+		tgt->si += src->si;
 		break;
 	case SYBINT4:
-		tgt->data.i += src->data.i;
+		tgt->i += src->i;
 		break;
 	case SYBFLT8:
-		tgt->data.f += src->data.f;
+		tgt->f += src->f;
 		break;
 	case SYBREAL:
-		tgt->data.r += src->data.r;
+		tgt->r += src->r;
 		break;
 
 	case SYBCHAR:
@@ -1143,7 +1136,7 @@ dbpivot_sum (struct col_t *tgt, const struct col_t *src)
 	default:
 		tdsdump_log(TDS_DBG_INFO1, "dbpivot_sum(): invalid operand %d\n", src->type);
 		tgt->type = SYBINT4;
-		tgt->data.i = 0;
+		tgt->i = 0;
 		break;
 	}
 }
@@ -1161,19 +1154,19 @@ dbpivot_min (struct col_t *tgt, const struct col_t *src)
 
 	switch (src->type) {
 	case SYBINT1:
-		tgt->data.ti = tgt->data.ti < src->data.ti? tgt->data.ti : src->data.ti;
+		tgt->ti = tgt->ti < src->ti? tgt->ti : src->ti;
 		break;
 	case SYBINT2:
-		tgt->data.si = tgt->data.si < src->data.si? tgt->data.si : src->data.si;
+		tgt->si = tgt->si < src->si? tgt->si : src->si;
 		break;
 	case SYBINT4:
-		tgt->data.i = tgt->data.i < src->data.i? tgt->data.i : src->data.i;
+		tgt->i = tgt->i < src->i? tgt->i : src->i;
 		break;
 	case SYBFLT8:
-		tgt->data.f = tgt->data.f < src->data.f? tgt->data.f : src->data.f;
+		tgt->f = tgt->f < src->f? tgt->f : src->f;
 		break;
 	case SYBREAL:
-		tgt->data.r = tgt->data.r < src->data.r? tgt->data.r : src->data.r;
+		tgt->r = tgt->r < src->r? tgt->r : src->r;
 		break;
 
 	case SYBCHAR:
@@ -1199,7 +1192,7 @@ dbpivot_min (struct col_t *tgt, const struct col_t *src)
 	default:
 		tdsdump_log(TDS_DBG_INFO1, "dbpivot_sum(): invalid operand %d\n", src->type);
 		tgt->type = SYBINT4;
-		tgt->data.i = 0;
+		tgt->i = 0;
 		break;
 	}
 }
@@ -1217,19 +1210,19 @@ dbpivot_max (struct col_t *tgt, const struct col_t *src)
 
 	switch (src->type) {
 	case SYBINT1:
-		tgt->data.ti = tgt->data.ti > src->data.ti? tgt->data.ti : src->data.ti;
+		tgt->ti = tgt->ti > src->ti? tgt->ti : src->ti;
 		break;
 	case SYBINT2:
-		tgt->data.si = tgt->data.si > src->data.si? tgt->data.si : src->data.si;
+		tgt->si = tgt->si > src->si? tgt->si : src->si;
 		break;
 	case SYBINT4:
-		tgt->data.i = tgt->data.i > src->data.i? tgt->data.i : src->data.i;
+		tgt->i = tgt->i > src->i? tgt->i : src->i;
 		break;
 	case SYBFLT8:
-		tgt->data.f = tgt->data.f > src->data.f? tgt->data.f : src->data.f;
+		tgt->f = tgt->f > src->f? tgt->f : src->f;
 		break;
 	case SYBREAL:
-		tgt->data.r = tgt->data.r > src->data.r? tgt->data.r : src->data.r;
+		tgt->r = tgt->r > src->r? tgt->r : src->r;
 		break;
 
 	case SYBCHAR:
@@ -1255,7 +1248,7 @@ dbpivot_max (struct col_t *tgt, const struct col_t *src)
 	default:
 		tdsdump_log(TDS_DBG_INFO1, "dbpivot_sum(): invalid operand %d\n", src->type);
 		tgt->type = SYBINT4;
-		tgt->data.i = 0;
+		tgt->i = 0;
 		break;
 	}
 }
@@ -1270,7 +1263,7 @@ static const struct name_t {
 	, { "max",	dbpivot_max }
 	};
 
-static bool
+static boolean
 name_equal( const struct name_t *n1, const struct name_t *n2 ) 
 {
 	assert(n1 && n2);

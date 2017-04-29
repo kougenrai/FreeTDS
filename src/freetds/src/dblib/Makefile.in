@@ -88,9 +88,6 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-@SYBASE_COMPAT_TRUE@am__append_1 = dbopen.c
-@MINGW32_TRUE@am__append_2 = winmain.c
-@MACOSX_FALSE@am__append_3 = -export-symbols-regex '^(db|bcp_|tdsdump_open|tdsdbopen|.*_xact|close_commit|open_commit|.?asprintf).*'
 subdir = src/dblib
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps =  \
@@ -105,10 +102,11 @@ am__aclocal_m4_deps =  \
 	$(top_srcdir)/m4/acx_pthread.m4 \
 	$(top_srcdir)/m4/ax_cflags_gcc_option.m4 \
 	$(top_srcdir)/m4/check_openssl.m4 \
-	$(top_srcdir)/m4/gettimemilli.m4 $(top_srcdir)/m4/libtool.m4 \
+	$(top_srcdir)/m4/gettimemilli.m4 $(top_srcdir)/m4/iconv.m4 \
+	$(top_srcdir)/m4/lib-ld.m4 $(top_srcdir)/m4/lib-link.m4 \
+	$(top_srcdir)/m4/lib-prefix.m4 $(top_srcdir)/m4/libtool.m4 \
 	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
 	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
-	$(top_srcdir)/m4/pushlibs.m4 \
 	$(top_srcdir)/m4/sprintf_i64_format.m4 \
 	$(top_srcdir)/m4/type_socklen_t.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
@@ -150,11 +148,11 @@ LTLIBRARIES = $(lib_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 libsybdb_la_DEPENDENCIES = ../tds/libtds.la \
 	../replacements/libreplacements.la $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 am__libsybdb_la_SOURCES_DIST = dblib.c dbutil.c rpc.c bcp.c xact.c \
-	dbpivot.c dbopen.c winmain.c
+	dbpivot.c dbopen.c ../../win32/initnet.c
 @SYBASE_COMPAT_TRUE@am__objects_1 = dbopen.lo
-@MINGW32_TRUE@am__objects_2 = winmain.lo
+@MINGW32_TRUE@am__objects_2 = initnet.lo
 am_libsybdb_la_OBJECTS = dblib.lo dbutil.lo rpc.lo bcp.lo xact.lo \
 	dbpivot.lo $(am__objects_1) $(am__objects_2)
 libsybdb_la_OBJECTS = $(am_libsybdb_la_OBJECTS)
@@ -271,7 +269,6 @@ am__relativize = \
   done; \
   reldir="$$dir2"
 ACLOCAL = @ACLOCAL@
-ALLOCA = @ALLOCA@
 AMTAR = @AMTAR@
 AM_CFLAGS = @AM_CFLAGS@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
@@ -303,10 +300,6 @@ FGREP = @FGREP@
 FREETDS_LIBGCC = @FREETDS_LIBGCC@
 FREETDS_ODBC_MODULE = @FREETDS_ODBC_MODULE@
 FREETDS_SYMBOLIC = @FREETDS_SYMBOLIC@
-GCRYPT_CFLAGS = @GCRYPT_CFLAGS@
-GCRYPT_LIBS = @GCRYPT_LIBS@
-GNUTLS_CFLAGS = @GNUTLS_CFLAGS@
-GNUTLS_LIBS = @GNUTLS_LIBS@
 GREP = @GREP@
 HAVE_OPENSSL = @HAVE_OPENSSL@
 HAVE_PERL_SOURCES = @HAVE_PERL_SOURCES@
@@ -331,14 +324,11 @@ LTLIBICONV = @LTLIBICONV@
 LTLIBOBJS = @LTLIBOBJS@
 LT_DLLOADERS = @LT_DLLOADERS@
 LT_DLPREOPEN = @LT_DLPREOPEN@
-LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAJOR = @MAJOR@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MINOR = @MINOR@
 MKDIR_P = @MKDIR_P@
-NETTLE_CFLAGS = @NETTLE_CFLAGS@
-NETTLE_LIBS = @NETTLE_LIBS@
 NETWORK_LIBS = @NETWORK_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -351,8 +341,6 @@ ODBCNODMLIB = @ODBCNODMLIB@
 ODBCNODMLIBAPP = @ODBCNODMLIBAPP@
 ODBC_CONFIG = @ODBC_CONFIG@
 ODBC_INC = @ODBC_INC@
-OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
-OPENSSL_LIBS = @OPENSSL_LIBS@
 OTOOL = @OTOOL@
 OTOOL64 = @OTOOL64@
 PACKAGE = @PACKAGE@
@@ -364,8 +352,6 @@ PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 PKG_CONFIG = @PKG_CONFIG@
-PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
-PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
@@ -443,13 +429,15 @@ top_srcdir = @top_srcdir@
 SUBDIRS = . unittests
 AM_CPPFLAGS = -I$(top_srcdir)/include
 lib_LTLIBRARIES = libsybdb.la
-libsybdb_la_SOURCES = dblib.c dbutil.c rpc.c bcp.c xact.c dbpivot.c \
-	$(am__append_1) $(am__append_2)
-EXTRA_DIST = dbopen.c buffering.h CMakeLists.txt winmain.c dblib.def
-# bumped for dbanydatecrack
-libsybdb_la_LDFLAGS = -version-info 6:0:1 $(FREETDS_SYMBOLIC) \
-	$(am__append_3)
-libsybdb_la_LIBADD = ../tds/libtds.la ../replacements/libreplacements.la $(LTLIBICONV) $(FREETDS_LIBGCC)
+@SYBASE_COMPAT_TRUE@DBOPEN = dbopen.c
+@MINGW32_FALSE@MINGW_SOURCES = 
+@MINGW32_TRUE@MINGW_SOURCES = ../../win32/initnet.c
+EXTRA_DIST = dbopen.c buffering.h CMakeLists.txt
+libsybdb_la_SOURCES = dblib.c dbutil.c rpc.c bcp.c xact.c dbpivot.c $(DBOPEN) $(MINGW_SOURCES)
+@MACOSX_FALSE@SYMBOLS = -export-symbols-regex '^(db|bcp_|tdsdump_open|tdsdbopen|.*_xact|close_commit|open_commit|.?asprintf).*'
+@MACOSX_TRUE@SYMBOLS = 
+libsybdb_la_LDFLAGS = -version-info 5:0:0 $(SYMBOLS) $(FREETDS_SYMBOLIC)
+libsybdb_la_LIBADD = ../tds/libtds.la ../replacements/libreplacements.la $(NETWORK_LIBS) $(LTLIBICONV) $(FREETDS_LIBGCC)
 all: all-recursive
 
 .SUFFIXES:
@@ -533,33 +521,37 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbopen.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbpivot.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbutil.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/initnet.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rpc.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/winmain.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/xact.Plo@am__quote@
 
 .c.o:
-@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
-@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
-@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c -o $@ $<
 
 .c.obj:
-@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.obj$$||'`;\
-@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ `$(CYGPATH_W) '$<'` &&\
-@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
 
 .c.lo:
-@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.lo$$||'`;\
-@am__fastdepCC_TRUE@	$(LTCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
-@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Plo
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LTCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Plo
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
+
+initnet.lo: ../../win32/initnet.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT initnet.lo -MD -MP -MF $(DEPDIR)/initnet.Tpo -c -o initnet.lo `test -f '../../win32/initnet.c' || echo '$(srcdir)/'`../../win32/initnet.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/initnet.Tpo $(DEPDIR)/initnet.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='../../win32/initnet.c' object='initnet.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o initnet.lo `test -f '../../win32/initnet.c' || echo '$(srcdir)/'`../../win32/initnet.c
 
 mostlyclean-libtool:
 	-rm -f *.lo

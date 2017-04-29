@@ -20,74 +20,60 @@
 #ifndef _tdsstring_h_
 #define _tdsstring_h_
 
+/* $Id: tdsstring.h,v 1.21 2010-01-25 23:05:59 freddy77 Exp $ */
+
 #include <freetds/pushvis.h>
+
+extern const struct tds_dstr tds_str_empty;
+
+/* TODO do some function and use inline if available */
 
 /** \addtogroup dstring
  * @{ 
  */
 
-/** Internal representation for an empty string */
-extern const struct tds_dstr tds_str_empty;
-
-/** Initializer, used to initialize string like in the following example
- * @code
- * DSTR s = DSTR_INITIALIZER;
- * @endcode
- */
-#define DSTR_INITIALIZER ((struct tds_dstr*) &tds_str_empty)
-
+#if ENABLE_EXTRA_CHECKS
+void tds_dstr_init(DSTR * s);
+int tds_dstr_isempty(DSTR * s);
+char *tds_dstr_buf(DSTR * s);
+size_t tds_dstr_len(DSTR * s);
+#else
 /** init a string with empty */
-static inline void
-tds_dstr_init(DSTR * s)
-{
-	*(s) = DSTR_INITIALIZER;
-}
+#define tds_dstr_init(s) \
+	do { *(s) = (struct tds_dstr*) &tds_str_empty; } while(0)
 
 /** test if string is empty */
-static inline int
-tds_dstr_isempty(DSTR * s)
-{
-	return (*s)->dstr_size == 0;
-}
+#define tds_dstr_isempty(s) \
+	((*(s))->dstr_size == 0)
+#define tds_dstr_buf(s) \
+	((*(s))->dstr_s)
+#define tds_dstr_len(s) \
+	((*(s))->dstr_size)
+#endif
 
-/**
- * Returns a buffer to edit the string.
- * Be careful to avoid buffer overflows and remember to
- * set the correct length at the end of the editing if changed.
- */
-static inline char *
-tds_dstr_buf(DSTR * s)
-{
-	return (*s)->dstr_s;
-}
+#define tds_dstr_cstr(s) \
+	((const char* ) tds_dstr_buf(s))
 
-/** Returns a C version (NUL terminated string) of dstr */
-static inline const char *
-tds_dstr_cstr(DSTR * s)
-{
-	return (*s)->dstr_s;
-}
-
-/** Returns the length of the string in bytes */
-static inline size_t
-tds_dstr_len(DSTR * s)
-{
-	return (*s)->dstr_size;
-}
+void tds_dstr_zero(DSTR * s);
+void tds_dstr_free(DSTR * s);
 
 /** Make a string empty */
 #define tds_dstr_empty(s) \
 	tds_dstr_free(s)
 
-void tds_dstr_zero(DSTR * s);
-void tds_dstr_free(DSTR * s);
-
+#if ENABLE_EXTRA_CHECKS && defined(__GNUC__) && __GNUC__ >= 4
+#define TDS_WUR __attribute__ ((__warn_unused_result__))
+#else
+#define TDS_WUR
+#endif
 DSTR* tds_dstr_dup(DSTR * s, const DSTR * src) TDS_WUR;
 DSTR* tds_dstr_copy(DSTR * s, const char *src) TDS_WUR;
 DSTR* tds_dstr_copyn(DSTR * s, const char *src, size_t length) TDS_WUR;
 DSTR* tds_dstr_set(DSTR * s, char *src) TDS_WUR;
 
+/** limit length of string, MUST be <= current length */
 DSTR* tds_dstr_setlen(DSTR *s, size_t length);
+/** allocate space for length char */
 DSTR* tds_dstr_alloc(DSTR *s, size_t length) TDS_WUR;
 
 /** @} */

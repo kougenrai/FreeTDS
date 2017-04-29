@@ -103,10 +103,11 @@ am__aclocal_m4_deps =  \
 	$(top_srcdir)/m4/acx_pthread.m4 \
 	$(top_srcdir)/m4/ax_cflags_gcc_option.m4 \
 	$(top_srcdir)/m4/check_openssl.m4 \
-	$(top_srcdir)/m4/gettimemilli.m4 $(top_srcdir)/m4/libtool.m4 \
+	$(top_srcdir)/m4/gettimemilli.m4 $(top_srcdir)/m4/iconv.m4 \
+	$(top_srcdir)/m4/lib-ld.m4 $(top_srcdir)/m4/lib-link.m4 \
+	$(top_srcdir)/m4/lib-prefix.m4 $(top_srcdir)/m4/libtool.m4 \
 	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
 	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
-	$(top_srcdir)/m4/pushlibs.m4 \
 	$(top_srcdir)/m4/sprintf_i64_format.m4 \
 	$(top_srcdir)/m4/type_socklen_t.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
@@ -174,9 +175,6 @@ get_send_data_LDADD = $(LDADD)
 am_lang_ct_param_OBJECTS = lang_ct_param.$(OBJEXT) common.$(OBJEXT)
 lang_ct_param_OBJECTS = $(am_lang_ct_param_OBJECTS)
 lang_ct_param_LDADD = $(LDADD)
-am_row_count_OBJECTS = row_count.$(OBJEXT) common.$(OBJEXT)
-row_count_OBJECTS = $(am_row_count_OBJECTS)
-row_count_LDADD = $(LDADD)
 am_rpc_ct_param_OBJECTS = rpc_ct_param.$(OBJEXT) common.$(OBJEXT)
 rpc_ct_param_OBJECTS = $(am_rpc_ct_param_OBJECTS)
 rpc_ct_param_LDADD = $(LDADD)
@@ -184,9 +182,6 @@ am_rpc_ct_setparam_OBJECTS = rpc_ct_setparam.$(OBJEXT) \
 	common.$(OBJEXT)
 rpc_ct_setparam_OBJECTS = $(am_rpc_ct_setparam_OBJECTS)
 rpc_ct_setparam_LDADD = $(LDADD)
-am_rpc_fail_OBJECTS = rpc_fail.$(OBJEXT) common.$(OBJEXT)
-rpc_fail_OBJECTS = $(am_rpc_fail_OBJECTS)
-rpc_fail_LDADD = $(LDADD)
 am_t0001_OBJECTS = t0001.$(OBJEXT) common.$(OBJEXT)
 t0001_OBJECTS = $(am_t0001_OBJECTS)
 t0001_LDADD = $(LDADD)
@@ -255,8 +250,7 @@ SOURCES = $(array_bind_SOURCES) $(blk_in_SOURCES) $(blk_in2_SOURCES) \
 	$(ct_diagclient_SOURCES) $(ct_diagserver_SOURCES) \
 	$(ct_dynamic_SOURCES) $(ct_options_SOURCES) $(datafmt_SOURCES) \
 	$(get_send_data_SOURCES) $(lang_ct_param_SOURCES) \
-	$(row_count_SOURCES) $(rpc_ct_param_SOURCES) \
-	$(rpc_ct_setparam_SOURCES) $(rpc_fail_SOURCES) \
+	$(rpc_ct_param_SOURCES) $(rpc_ct_setparam_SOURCES) \
 	$(t0001_SOURCES) $(t0002_SOURCES) $(t0003_SOURCES) \
 	$(t0004_SOURCES) $(t0005_SOURCES) $(t0006_SOURCES) \
 	$(t0007_SOURCES) $(t0008_SOURCES) $(t0009_SOURCES)
@@ -268,8 +262,7 @@ DIST_SOURCES = $(array_bind_SOURCES) $(blk_in_SOURCES) \
 	$(ct_diagserver_SOURCES) $(ct_dynamic_SOURCES) \
 	$(ct_options_SOURCES) $(datafmt_SOURCES) \
 	$(get_send_data_SOURCES) $(lang_ct_param_SOURCES) \
-	$(row_count_SOURCES) $(rpc_ct_param_SOURCES) \
-	$(rpc_ct_setparam_SOURCES) $(rpc_fail_SOURCES) \
+	$(rpc_ct_param_SOURCES) $(rpc_ct_setparam_SOURCES) \
 	$(t0001_SOURCES) $(t0002_SOURCES) $(t0003_SOURCES) \
 	$(t0004_SOURCES) $(t0005_SOURCES) $(t0006_SOURCES) \
 	$(t0007_SOURCES) $(t0008_SOURCES) $(t0009_SOURCES)
@@ -505,7 +498,6 @@ am__DIST_COMMON = $(srcdir)/Makefile.in $(top_srcdir)/depcomp \
 	$(top_srcdir)/mkinstalldirs $(top_srcdir)/test-driver
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
-ALLOCA = @ALLOCA@
 AMTAR = @AMTAR@
 AM_CFLAGS = @AM_CFLAGS@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
@@ -537,10 +529,6 @@ FGREP = @FGREP@
 FREETDS_LIBGCC = @FREETDS_LIBGCC@
 FREETDS_ODBC_MODULE = @FREETDS_ODBC_MODULE@
 FREETDS_SYMBOLIC = @FREETDS_SYMBOLIC@
-GCRYPT_CFLAGS = @GCRYPT_CFLAGS@
-GCRYPT_LIBS = @GCRYPT_LIBS@
-GNUTLS_CFLAGS = @GNUTLS_CFLAGS@
-GNUTLS_LIBS = @GNUTLS_LIBS@
 GREP = @GREP@
 HAVE_OPENSSL = @HAVE_OPENSSL@
 HAVE_PERL_SOURCES = @HAVE_PERL_SOURCES@
@@ -557,7 +545,7 @@ LIBADD_DLOPEN = @LIBADD_DLOPEN@
 LIBADD_SHL_LOAD = @LIBADD_SHL_LOAD@
 LIBICONV = @LIBICONV@
 LIBOBJS = @LIBOBJS@
-LIBS = ../libct.la ../../replacements/libreplacements.la $(LTLIBICONV)
+LIBS = ../libct.la ../../replacements/libreplacements.la $(LTLIBICONV) @NETWORK_LIBS@
 LIBTOOL = @LIBTOOL@
 LIPO = @LIPO@
 LN_S = @LN_S@
@@ -565,14 +553,11 @@ LTLIBICONV = @LTLIBICONV@
 LTLIBOBJS = @LTLIBOBJS@
 LT_DLLOADERS = @LT_DLLOADERS@
 LT_DLPREOPEN = @LT_DLPREOPEN@
-LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAJOR = @MAJOR@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MINOR = @MINOR@
 MKDIR_P = @MKDIR_P@
-NETTLE_CFLAGS = @NETTLE_CFLAGS@
-NETTLE_LIBS = @NETTLE_LIBS@
 NETWORK_LIBS = @NETWORK_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -585,8 +570,6 @@ ODBCNODMLIB = @ODBCNODMLIB@
 ODBCNODMLIBAPP = @ODBCNODMLIBAPP@
 ODBC_CONFIG = @ODBC_CONFIG@
 ODBC_INC = @ODBC_INC@
-OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
-OPENSSL_LIBS = @OPENSSL_LIBS@
 OTOOL = @OTOOL@
 OTOOL64 = @OTOOL64@
 PACKAGE = @PACKAGE@
@@ -598,8 +581,6 @@ PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 PKG_CONFIG = @PKG_CONFIG@
-PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
-PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
@@ -680,8 +661,7 @@ TESTS = t0001$(EXEEXT) t0002$(EXEEXT) t0003$(EXEEXT) t0004$(EXEEXT) \
 			ct_diagclient$(EXEEXT) ct_diagserver$(EXEEXT) ct_diagall$(EXEEXT) \
 			cs_config$(EXEEXT) cancel$(EXEEXT) blk_in$(EXEEXT) \
 			blk_out$(EXEEXT) ct_cursor$(EXEEXT) ct_cursors$(EXEEXT) \
-			ct_dynamic$(EXEEXT) blk_in2$(EXEEXT) datafmt$(EXEEXT) \
-			rpc_fail$(EXEEXT) row_count$(EXEEXT)
+			ct_dynamic$(EXEEXT) blk_in2$(EXEEXT) datafmt$(EXEEXT)
 
 check_PROGRAMS = $(TESTS)
 t0001_SOURCES = t0001.c common.c common.h
@@ -713,8 +693,6 @@ ct_cursors_SOURCES = ct_cursors.c common.c common.h
 ct_dynamic_SOURCES = ct_dynamic.c common.c common.h
 blk_in2_SOURCES = blk_in2.c common.c common.h
 datafmt_SOURCES = datafmt.c common.c common.h
-rpc_fail_SOURCES = rpc_fail.c common.c common.h
-row_count_SOURCES = row_count.c common.c common.h
 AM_CPPFLAGS = -I$(top_srcdir)/include
 @MINGW32_FALSE@AM_LDFLAGS = -no-install -L../.libs -R $(abs_builddir)/../.libs
 @MINGW32_TRUE@AM_LDFLAGS = -no-fast-install
@@ -835,10 +813,6 @@ lang_ct_param$(EXEEXT): $(lang_ct_param_OBJECTS) $(lang_ct_param_DEPENDENCIES) $
 	@rm -f lang_ct_param$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(lang_ct_param_OBJECTS) $(lang_ct_param_LDADD) $(LIBS)
 
-row_count$(EXEEXT): $(row_count_OBJECTS) $(row_count_DEPENDENCIES) $(EXTRA_row_count_DEPENDENCIES) 
-	@rm -f row_count$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(row_count_OBJECTS) $(row_count_LDADD) $(LIBS)
-
 rpc_ct_param$(EXEEXT): $(rpc_ct_param_OBJECTS) $(rpc_ct_param_DEPENDENCIES) $(EXTRA_rpc_ct_param_DEPENDENCIES) 
 	@rm -f rpc_ct_param$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(rpc_ct_param_OBJECTS) $(rpc_ct_param_LDADD) $(LIBS)
@@ -846,10 +820,6 @@ rpc_ct_param$(EXEEXT): $(rpc_ct_param_OBJECTS) $(rpc_ct_param_DEPENDENCIES) $(EX
 rpc_ct_setparam$(EXEEXT): $(rpc_ct_setparam_OBJECTS) $(rpc_ct_setparam_DEPENDENCIES) $(EXTRA_rpc_ct_setparam_DEPENDENCIES) 
 	@rm -f rpc_ct_setparam$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(rpc_ct_setparam_OBJECTS) $(rpc_ct_setparam_LDADD) $(LIBS)
-
-rpc_fail$(EXEEXT): $(rpc_fail_OBJECTS) $(rpc_fail_DEPENDENCIES) $(EXTRA_rpc_fail_DEPENDENCIES) 
-	@rm -f rpc_fail$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(rpc_fail_OBJECTS) $(rpc_fail_LDADD) $(LIBS)
 
 t0001$(EXEEXT): $(t0001_OBJECTS) $(t0001_DEPENDENCIES) $(EXTRA_t0001_DEPENDENCIES) 
 	@rm -f t0001$(EXEEXT)
@@ -912,10 +882,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/datafmt.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/get_send_data.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lang_ct_param.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/row_count.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rpc_ct_param.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rpc_ct_setparam.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rpc_fail.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/t0001.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/t0002.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/t0003.Po@am__quote@
@@ -927,25 +895,22 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/t0009.Po@am__quote@
 
 .c.o:
-@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
-@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
-@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c -o $@ $<
 
 .c.obj:
-@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.obj$$||'`;\
-@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ `$(CYGPATH_W) '$<'` &&\
-@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
 
 .c.lo:
-@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.lo$$||'`;\
-@am__fastdepCC_TRUE@	$(LTCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
-@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Plo
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LTCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Plo
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
@@ -1348,20 +1313,6 @@ blk_in2.log: blk_in2$(EXEEXT)
 datafmt.log: datafmt$(EXEEXT)
 	@p='datafmt$(EXEEXT)'; \
 	b='datafmt'; \
-	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
-	--log-file $$b.log --trs-file $$b.trs \
-	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
-	"$$tst" $(AM_TESTS_FD_REDIRECT)
-rpc_fail.log: rpc_fail$(EXEEXT)
-	@p='rpc_fail$(EXEEXT)'; \
-	b='rpc_fail'; \
-	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
-	--log-file $$b.log --trs-file $$b.trs \
-	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
-	"$$tst" $(AM_TESTS_FD_REDIRECT)
-row_count.log: row_count$(EXEEXT)
-	@p='row_count$(EXEEXT)'; \
-	b='row_count'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \

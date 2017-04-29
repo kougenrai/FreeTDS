@@ -26,10 +26,10 @@
 #include <freetds/thread.h>
 #include <freetds/data.h>
 
-#if defined(UNIXODBC) || defined(_WIN32) || defined(TDS_NO_DM)
+#if defined(UNIXODBC) || defined(TDS_NO_DM)
 #include <sql.h>
 #include <sqlext.h>
-#if defined(UNIXODBC) || defined(_WIN32)
+#ifdef UNIXODBC
 #include <odbcinst.h>
 #endif
 #else /* IODBC */
@@ -61,6 +61,75 @@
 #define SQLROWSETSIZE SQLULEN
 #endif
 
+#ifndef SQL_COPT_SS_BASE
+#define SQL_COPT_SS_BASE	1200
+#endif
+
+#ifndef SQL_COPT_SS_MARS_ENABLED
+#define SQL_COPT_SS_MARS_ENABLED	(SQL_COPT_SS_BASE+24)
+#endif
+
+#define SQL_INFO_FREETDS_TDS_VERSION	1300
+
+#ifndef SQL_MARS_ENABLED_NO
+#define SQL_MARS_ENABLED_NO	0
+#endif
+
+#ifndef SQL_MARS_ENABLED_YES
+#define SQL_MARS_ENABLED_YES	1
+#endif
+
+#ifndef SQL_SS_TIME2
+#define SQL_SS_TIME2	(-154)
+#endif
+
+#ifndef SQL_SS_TIMESTAMPOFFSET
+#define SQL_SS_TIMESTAMPOFFSET	(-155)
+#endif
+
+/*
+ * these types are used from conversion from client to server
+ */
+#ifndef SQL_C_SS_TIME2
+#define SQL_C_SS_TIME2	(0x4000)
+#endif
+
+#ifndef SQL_C_SS_TIMESTAMPOFFSET
+#define SQL_C_SS_TIMESTAMPOFFSET	(0x4001)
+#endif
+
+#ifndef SQL_CA_SS_BASE
+#define SQL_CA_SS_BASE 1200
+#endif
+
+#ifndef SQL_CA_SS_UDT_CATALOG_NAME
+#define SQL_CA_SS_UDT_CATALOG_NAME	(SQL_CA_SS_BASE+18)
+#endif
+
+#ifndef SQL_CA_SS_UDT_SCHEMA_NAME
+#define SQL_CA_SS_UDT_SCHEMA_NAME	(SQL_CA_SS_BASE+19)
+#endif
+
+#ifndef SQL_CA_SS_UDT_TYPE_NAME
+#define SQL_CA_SS_UDT_TYPE_NAME	(SQL_CA_SS_BASE+20)
+#endif
+
+#ifndef SQL_CA_SS_UDT_ASSEMBLY_TYPE_NAME
+#define SQL_CA_SS_UDT_ASSEMBLY_TYPE_NAME	(SQL_CA_SS_BASE+21)
+#endif
+
+#ifndef SQL_CA_SS_XML_SCHEMACOLLECTION_CATALOG_NAME
+#define SQL_CA_SS_XML_SCHEMACOLLECTION_CATALOG_NAME	(SQL_CA_SS_BASE+22)
+#endif
+
+#ifndef SQL_CA_SS_XML_SCHEMACOLLECTION_SCHEMA_NAME
+#define SQL_CA_SS_XML_SCHEMACOLLECTION_SCHEMA_NAME	(SQL_CA_SS_BASE+23)
+#endif
+
+#ifndef SQL_CA_SS_XML_SCHEMACOLLECTION_NAME
+#define SQL_CA_SS_XML_SCHEMACOLLECTION_NAME	(SQL_CA_SS_BASE+24)
+#endif
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -68,6 +137,8 @@ extern "C"
 }
 #endif
 #endif
+
+/* $Id: tdsodbc.h,v 1.134 2012-03-09 21:51:21 freddy77 Exp $ */
 
 #include <freetds/pushvis.h>
 #if defined(__GNUC__) && __GNUC__ >= 4 && !defined(__MINGW32__)
@@ -256,7 +327,6 @@ struct _hcattr
 	SQLUINTEGER txn_isolation;
 	SQLUINTEGER mars_enabled;
 	SQLUINTEGER cursor_type;
-	SQLUINTEGER bulk_enabled;
 #ifdef TDS_NO_DM
 	SQLUINTEGER trace;
 	DSTR tracefile;
@@ -274,7 +344,7 @@ struct _hdbc
 	struct _henv *env;
 	TDSSOCKET *tds_socket;
 	DSTR dsn;
-	DSTR oldpwd;
+	DSTR server;		/* aka Instance */
 #ifdef ENABLE_ODBC_WIDE
 	DSTR original_charset;
 	TDSICONV *mb_conv;
@@ -292,12 +362,8 @@ struct _hdbc
 	/** descriptors associated to connection */
 	TDS_DESC *uad[TDS_MAX_APP_DESC];
 	/** <>0 if server handle cursors */
-	unsigned int cursor_support:1;
-	unsigned int use_oldpwd:1;
+	unsigned int cursor_support;
 	TDS_INT default_query_timeout;
-
-	TDSBCPINFO *bcpinfo;
-	char *bcphint;
 };
 
 struct _hsattr
@@ -379,7 +445,7 @@ struct _hstmt
 	tds_mutex mtx;
 	struct _hdbc *dbc;
 	/** query to execute */
-	DSTR query;
+	char *query;
 	/** socket (only if active) */
 	TDSSOCKET *tds;
 
@@ -389,7 +455,7 @@ struct _hstmt
 	struct _hstmt *prev;
 
 	/* begin prepared query stuff */
-	unsigned is_prepared_query:1;
+	char *prepared_query;
 	unsigned prepared_query_is_func:1;
 	unsigned prepared_query_is_rpc:1;
 	unsigned need_reprepare:1;
@@ -432,6 +498,7 @@ typedef struct _hchk TDS_CHK;
 typedef struct {
 	/* this must be the first member */
 	TDSCOLUMNFUNCS common;
+	SQLSMALLINT (*server_to_sql_type)(TDSCOLUMN *col);
 	void (*set_type_info)(TDSCOLUMN *col, struct _drecord *drec, SQLINTEGER odbc_ver);
 } TDS_FUNCS;
 
@@ -503,9 +570,7 @@ BOOL get_login_info(HWND hwndParent, TDSLOGIN * login);
 	ODBC_PARAM(UseNTLMv2) \
 	ODBC_PARAM(MARS_Connection) \
 	ODBC_PARAM(REALM) \
-	ODBC_PARAM(ServerSPN) \
-	ODBC_PARAM(AttachDbFilename) \
-	ODBC_PARAM(ApplicationIntent)
+	ODBC_PARAM(ServerSPN)
 
 #define ODBC_PARAM(p) ODBC_PARAM_##p,
 enum {
@@ -601,27 +666,42 @@ typedef union {
 # define ODBC_CHAR SQLCHAR
 #endif
 int odbc_set_stmt_query(struct _hstmt *stmt, const ODBC_CHAR *sql, int sql_len _WIDE);
+int odbc_set_stmt_prepared_query(struct _hstmt *stmt, const ODBC_CHAR *sql, int sql_len _WIDE);
 void odbc_set_return_status(struct _hstmt *stmt, unsigned int n_row);
 void odbc_set_return_params(struct _hstmt *stmt, unsigned int n_row);
 
-void odbc_set_sql_type_info(TDSCOLUMN * col, struct _drecord *drec, SQLINTEGER odbc_ver);
+/**
+ * Convert type from database to ODBC
+ */
+static inline SQLSMALLINT
+odbc_server_to_sql_type(TDSCOLUMN *col)
+{
+	return ((TDS_FUNCS *) col->funcs)->server_to_sql_type(col);
+}
+
+static inline void
+odbc_set_sql_type_info(TDSCOLUMN * col, struct _drecord *drec, SQLINTEGER odbc_ver)
+{
+	((TDS_FUNCS *) col->funcs)->set_type_info(col, drec, odbc_ver);
+}
 
 int odbc_sql_to_c_type_default(int sql_type);
-TDS_SERVER_TYPE odbc_sql_to_server_type(TDSCONNECTION * conn, int sql_type, int sql_unsigned);
-TDS_SERVER_TYPE odbc_c_to_server_type(int c_type);
+int odbc_sql_to_server_type(TDSCONNECTION * conn, int sql_type, int sql_unsigned);
+int odbc_c_to_server_type(int c_type);
 
-unsigned int odbc_get_string_size(int size, const ODBC_CHAR * str _WIDE);
+SQLINTEGER odbc_sql_to_displaysize(int sqltype, TDSCOLUMN *col);
+int odbc_get_string_size(int size, ODBC_CHAR * str _WIDE);
 void odbc_rdbms_version(TDSSOCKET * tds_socket, char *pversion_string);
 SQLINTEGER odbc_get_param_len(const struct _drecord *drec_axd, const struct _drecord *drec_ixd, const TDS_DESC* axd, unsigned int n_row);
 
 #ifdef ENABLE_ODBC_WIDE
-DSTR* odbc_dstr_copy_flag(TDS_DBC *dbc, DSTR *s, int size, const ODBC_CHAR * str, int flag);
+DSTR* odbc_dstr_copy_flag(TDS_DBC *dbc, DSTR *s, int size, ODBC_CHAR * str, int flag);
 #define odbc_dstr_copy(dbc, s, len, out) \
 	odbc_dstr_copy_flag(dbc, s, len, sizeof((out)->mb) ? (out) : (out), wide)
 #define odbc_dstr_copy_oct(dbc, s, len, out) \
 	odbc_dstr_copy_flag(dbc, s, len, out, wide|0x20)
 #else
-DSTR* odbc_dstr_copy(TDS_DBC *dbc, DSTR *s, int size, const ODBC_CHAR * str);
+DSTR* odbc_dstr_copy(TDS_DBC *dbc, DSTR *s, int size, ODBC_CHAR * str);
 #define odbc_dstr_copy_oct odbc_dstr_copy
 #endif
 
@@ -651,7 +731,7 @@ void odbc_convert_err_set(struct _sql_errors *errs, TDS_INT err);
  * prepare_query.c
  */
 SQLRETURN prepare_call(struct _hstmt *stmt);
-SQLRETURN native_sql(struct _hdbc *dbc, DSTR *s);
+SQLRETURN native_sql(struct _hdbc *dbc, char *s);
 int parse_prepared_query(struct _hstmt *stmt, int compute_row);
 int start_parse_prepared_query(struct _hstmt *stmt, int compute_row);
 int continue_parse_prepared_query(struct _hstmt *stmt, SQLPOINTER DataPtr, SQLLEN StrLen_or_Ind);
@@ -661,19 +741,6 @@ const char *parse_const_param(const char * s, TDS_SERVER_TYPE *type);
  * sql2tds.c
  */
 SQLRETURN odbc_sql2tds(TDS_STMT * stmt, const struct _drecord *drec_ixd, const struct _drecord *drec_axd, TDSCOLUMN *curcol, int compute_row, const TDS_DESC* axd, unsigned int n_row);
-TDS_INT convert_datetime2server(int bindtype, const void *src, TDS_DATETIMEALL * dta);
-
-/*
- * bcp.c
- */
-void odbc_bcp_free_storage(TDS_DBC *dbc);
-void odbc_bcp_init(TDS_DBC *dbc, const ODBC_CHAR *tblname, const ODBC_CHAR *hfile, const ODBC_CHAR *errfile, int direction _WIDE);
-void odbc_bcp_control(TDS_DBC *dbc, int field, void *value);
-void odbc_bcp_colptr(TDS_DBC *dbc, const void * colptr, int table_column);
-void odbc_bcp_sendrow(TDS_DBC *dbc);
-int odbc_bcp_batch(TDS_DBC *dbc);
-int odbc_bcp_done(TDS_DBC *dbc);
-void odbc_bcp_bind(TDS_DBC *dbc, const void * varaddr, int prefixlen, int varlen, const void * terminator, int termlen, int vartype, int table_column);
 
 /*
  * sqlwchar.c

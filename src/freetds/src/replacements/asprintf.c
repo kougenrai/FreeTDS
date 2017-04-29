@@ -16,8 +16,10 @@
 #include <freetds/sysdep_private.h>
 #include "replacements.h"
 
+TDS_RCSID(var, "$Id: asprintf.c,v 1.8 2011-05-16 08:51:40 freddy77 Exp $");
+
 int
-tds_asprintf(char **ret, const char *fmt, ...)
+asprintf(char **ret, const char *fmt, ...)
 {
 	int len;
 	va_list ap;

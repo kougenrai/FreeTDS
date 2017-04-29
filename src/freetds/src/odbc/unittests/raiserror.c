@@ -4,6 +4,9 @@
 
 /* TODO add support for Sybase */
 
+static char software_version[] = "$Id: raiserror.c,v 1.26 2011-07-12 10:16:59 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
+
 #define SP_TEXT "{?=call #tmp1(?,?,?)}"
 #define OUTSTRING_LEN 20
 #define INVALID_RETURN (-12345)
@@ -160,7 +163,6 @@ Test(int level)
 		SQLTCHAR MessageText[1000];
 		SQLSMALLINT TextLength;
 		SQLRETURN expected;
-		SQLLEN rows;
 
 		if (result != SQL_NO_DATA)
 			ODBC_REPORT_ERROR("SQLFetch should return NO DATA");
@@ -184,8 +186,7 @@ Test(int level)
 		}
 
 		/* a recordset with only warnings/errors do not contains rows */
-		if (CHKRowCount(&rows, "SE") == SQL_SUCCESS && rows != -1)
-			ODBC_REPORT_ERROR("SQLRowCount returned some rows");
+		ODBC_CHECK_ROWS(-1);
 	} else {
 		/* in ODBC 2 errors/warnings are not handled as different recordset */
 		TestResult(result, level, "SQLFetch");
@@ -195,10 +196,7 @@ Test(int level)
 		CheckData("");
 
 	if (!g_second_select) {
-		SQLLEN rows;
-
-		if (CHKRowCount(&rows, "SE") == SQL_SUCCESS && rows != -1)
-			ODBC_REPORT_ERROR("SQLRowCount returned some rows");
+		ODBC_CHECK_ROWS(-1);
 		CheckReturnCode(result, g_nocount ? 0 : INVALID_RETURN);
 
 		result = SQLMoreResults(odbc_stmt);

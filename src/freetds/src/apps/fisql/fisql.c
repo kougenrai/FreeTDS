@@ -531,8 +531,7 @@ main(int argc, char *argv[])
 			if (line == NULL) {
 				line = "exit";
 			}
-			for (cp = line; *cp && isspace((unsigned char) *cp); cp++)
-				continue;
+			for (cp = line; *cp && isspace((unsigned char) *cp); cp++);
 			if (*cp) {
 				add_history(line);
 			}
@@ -554,11 +553,9 @@ main(int argc, char *argv[])
 			}
 			/* XXX: isql off-by-one line count error for :r not duplicated */
 			if (!(strncasecmp(line, ":r", 2))) {
-				for (cp = line + 2; *cp && (isspace((unsigned char) *cp)); cp++)
-					continue;
+				for (cp = line + 2; *cp && (isspace((unsigned char) *cp)); cp++);
 				tfn = cp;
-				for (; *cp && !(isspace((unsigned char) *cp)); cp++)
-					continue;
+				for (; *cp && !(isspace((unsigned char) *cp)); cp++);
 				*cp = '\0';
 				if ((fp = fopen(tfn, "r")) == NULL) {
 					fprintf(stderr, "Operating system error: Failed to open %s.\n", tfn);
@@ -611,12 +608,9 @@ main(int argc, char *argv[])
 			if ((!(strcasecmp(firstword, "vi")))
 			    || (!(strcasecmp(firstword, editor)))) {
 				int tmpfd;
-				mode_t old_mask;
 
 				strcpy(tmpfn, "/tmp/fisqlXXXXXX");
-				old_mask = umask(0600);
 				tmpfd = mkstemp(tmpfn);
-				umask(old_mask);
 				if ((fp = fdopen(tmpfd, "w")) == NULL) {
 					perror("fisql");
 					reset_term();

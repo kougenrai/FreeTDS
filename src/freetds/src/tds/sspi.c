@@ -19,9 +19,6 @@
 
 #include <config.h>
 
-/* enabled some additional definitions for getaddrinfo */
-#define _WIN32_WINNT 0x601
-
 /* fix possible bug in sspi.h header */
 #define FreeCredentialHandle FreeCredentialsHandle
 
@@ -46,6 +43,8 @@
 #include <freetds/thread.h>
 #include <freetds/string.h>
 #include "replacements.h"
+
+TDS_RCSID(var, "$Id: sspi.c,v 1.12 2011-06-10 17:51:44 freddy77 Exp $");
 
 /**
  * \ingroup libtds
@@ -81,7 +80,16 @@ tds_init_secdll(void)
 	tds_mutex_lock(&sec_mutex);
 	for (;;) {
 		if (!secdll) {
-			secdll = LoadLibrary("secur32.dll");
+			OSVERSIONINFO osver;
+
+			memset(&osver, 0, sizeof(osver));
+			osver.dwOSVersionInfoSize = sizeof(osver);
+			if (!GetVersionEx(&osver))
+				break;
+			if (osver.dwPlatformId == VER_PLATFORM_WIN32_NT && osver.dwMajorVersion <= 4)
+				secdll = LoadLibrary("security.dll");
+			else
+				secdll = LoadLibrary("secur32.dll");
 			if (!secdll)
 				break;
 		}
@@ -131,7 +139,7 @@ tds_sspi_handle_next(TDSSOCKET * tds, struct tds_authentication * tds_auth, size
 	if (len < 32)
 		return TDS_FAIL;
 
-	auth_buf = tds_new(TDS_UCHAR, len);
+	auth_buf = (TDS_UCHAR *) malloc(len);
 	if (!auth_buf)
 		return TDS_FAIL;
 	tds_get_n(tds, auth_buf, (int)len);
@@ -198,7 +206,6 @@ tds_sspi_get_auth(TDSSOCKET * tds)
 	TimeStamp ts;
 	SEC_WINNT_AUTH_IDENTITY identity;
 	const char *p, *user_name, *server_name;
-	struct addrinfo *addrs = NULL;
 
 	TDSSSPIAUTH *auth;
 	TDSLOGIN *login = tds->login;
@@ -224,7 +231,7 @@ tds_sspi_get_auth(TDSSOCKET * tds)
 		identity.UserLength = strlen(user_name);
 	}
 
-	auth = tds_new0(TDSSSPIAUTH, 1);
+	auth = (TDSSSPIAUTH *) calloc(1, sizeof(TDSSSPIAUTH));
 	if (!auth || !tds->login)
 		return NULL;
 
@@ -250,36 +257,18 @@ tds_sspi_get_auth(TDSSOCKET * tds)
 	/* build SPN */
 	server_name = tds_dstr_cstr(&login->server_host_name);
 	if (strchr(server_name, '.') == NULL) {
-		struct addrinfo hints;
-		int res;
-
-		memset(&hints, 0, sizeof(hints));
-		hints.ai_family = AF_UNSPEC;
-		hints.ai_socktype = SOCK_STREAM;
-		hints.ai_flags = AI_V4MAPPED|AI_ADDRCONFIG|AI_CANONNAME|AI_FQDN;
-		res = getaddrinfo(server_name, NULL, &hints, &addrs);
-		if (res) {
-			/* some version of Windows does not support V4MAPPED
-			 * and ADDRCONFIG, try without them
-			 */
-			hints.ai_flags = AI_CANONNAME|AI_FQDN;
-			res = getaddrinfo(server_name, NULL, &hints, &addrs);
-		}
-		if (!res && addrs->ai_canonname && strchr(addrs->ai_canonname, '.') != NULL)
-			server_name = addrs->ai_canonname;
+		struct hostent *host = gethostbyname(server_name);
+		if (host && strchr(host->h_name, '.') != NULL)
+			server_name = host->h_name;
 	}
 	if (strchr(server_name, '.') != NULL) {
 		if (asprintf(&auth->sname, "MSSQLSvc/%s:%d", server_name, login->port) < 0) {
-			if (addrs)
-				freeaddrinfo(addrs);
 			sec_fn->FreeCredentialsHandle(&auth->cred);
 			free(auth);
 			return NULL;
 		}
 		tdsdump_log(TDS_DBG_NETWORK, "kerberos name %s\n", auth->sname);
 	}
-	if (addrs)
-		freeaddrinfo(addrs);
 
 	status = sec_fn->InitializeSecurityContext(&auth->cred, NULL, auth->sname,
 		ISC_REQ_CONFIDENTIALITY | ISC_REQ_REPLAY_DETECT | ISC_REQ_CONNECTION | ISC_REQ_ALLOCATE_MEMORY,

@@ -9,6 +9,9 @@
 #include <ctpublic.h>
 #include "common.h"
 
+static char software_version[] = "$Id: ct_cursors.c,v 1.4 2011-05-16 08:51:40 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
+
 int
 main(int argc, char **argv)
 {
@@ -33,9 +36,6 @@ main(int argc, char **argv)
 	CS_INT datalength;
 	CS_CHAR text[128];
 	CS_INT num_cols, i;
-
-	memset(col1, 0, sizeof(col1));
-	memset(col2, 0, sizeof(col2));
 
 	fprintf(stdout, "%s: use multiple cursors on the same connection\n", __FILE__);
 

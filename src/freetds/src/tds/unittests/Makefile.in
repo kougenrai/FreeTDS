@@ -88,8 +88,15 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
+TESTS = t0001$(EXEEXT) t0002$(EXEEXT) t0003$(EXEEXT) t0004$(EXEEXT) \
+	t0005$(EXEEXT) t0006$(EXEEXT) t0007$(EXEEXT) t0008$(EXEEXT) \
+	dynamic1$(EXEEXT) convert$(EXEEXT) dataread$(EXEEXT) \
+	utf8_1$(EXEEXT) utf8_2$(EXEEXT) utf8_3$(EXEEXT) \
+	numeric$(EXEEXT) iconv_fread$(EXEEXT) toodynamic$(EXEEXT) \
+	$(am__EXEEXT_1) readconf$(EXEEXT) charconv$(EXEEXT) \
+	nulls$(EXEEXT)
+check_PROGRAMS = $(am__EXEEXT_2)
 @ENABLE_DEVELOPING_TRUE@noinst_PROGRAMS = collations$(EXEEXT)
-@HAVE_SSPI_FALSE@am__append_1 = challenge$(EXEEXT)
 subdir = src/tds/unittests
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps =  \
@@ -104,10 +111,11 @@ am__aclocal_m4_deps =  \
 	$(top_srcdir)/m4/acx_pthread.m4 \
 	$(top_srcdir)/m4/ax_cflags_gcc_option.m4 \
 	$(top_srcdir)/m4/check_openssl.m4 \
-	$(top_srcdir)/m4/gettimemilli.m4 $(top_srcdir)/m4/libtool.m4 \
+	$(top_srcdir)/m4/gettimemilli.m4 $(top_srcdir)/m4/iconv.m4 \
+	$(top_srcdir)/m4/lib-ld.m4 $(top_srcdir)/m4/lib-link.m4 \
+	$(top_srcdir)/m4/lib-prefix.m4 $(top_srcdir)/m4/libtool.m4 \
 	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
 	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
-	$(top_srcdir)/m4/pushlibs.m4 \
 	$(top_srcdir)/m4/sprintf_i64_format.m4 \
 	$(top_srcdir)/m4/type_socklen_t.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
@@ -117,6 +125,14 @@ mkinstalldirs = $(SHELL) $(top_srcdir)/mkinstalldirs
 CONFIG_HEADER = $(top_builddir)/include/config.h
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
+@HAVE_SSPI_FALSE@am__EXEEXT_1 = challenge$(EXEEXT)
+am__EXEEXT_2 = t0001$(EXEEXT) t0002$(EXEEXT) t0003$(EXEEXT) \
+	t0004$(EXEEXT) t0005$(EXEEXT) t0006$(EXEEXT) t0007$(EXEEXT) \
+	t0008$(EXEEXT) dynamic1$(EXEEXT) convert$(EXEEXT) \
+	dataread$(EXEEXT) utf8_1$(EXEEXT) utf8_2$(EXEEXT) \
+	utf8_3$(EXEEXT) numeric$(EXEEXT) iconv_fread$(EXEEXT) \
+	toodynamic$(EXEEXT) $(am__EXEEXT_1) readconf$(EXEEXT) \
+	charconv$(EXEEXT) nulls$(EXEEXT)
 PROGRAMS = $(noinst_PROGRAMS)
 am__challenge_SOURCES_DIST = challenge.c
 @HAVE_SSPI_FALSE@am_challenge_OBJECTS = challenge.$(OBJEXT)
@@ -137,9 +153,6 @@ collations_LDADD = $(LDADD)
 am_convert_OBJECTS = convert.$(OBJEXT)
 convert_OBJECTS = $(am_convert_OBJECTS)
 convert_LDADD = $(LDADD)
-am_corrupt_OBJECTS = corrupt.$(OBJEXT) common.$(OBJEXT)
-corrupt_OBJECTS = $(am_corrupt_OBJECTS)
-corrupt_LDADD = $(LDADD)
 am_dataread_OBJECTS = dataread.$(OBJEXT) common.$(OBJEXT)
 dataread_OBJECTS = $(am_dataread_OBJECTS)
 dataread_LDADD = $(LDADD)
@@ -229,22 +242,21 @@ am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
 SOURCES = $(challenge_SOURCES) $(charconv_SOURCES) \
-	$(collations_SOURCES) $(convert_SOURCES) $(corrupt_SOURCES) \
+	$(collations_SOURCES) $(convert_SOURCES) $(dataread_SOURCES) \
+	$(dynamic1_SOURCES) $(iconv_fread_SOURCES) $(nulls_SOURCES) \
+	$(numeric_SOURCES) $(readconf_SOURCES) $(t0001_SOURCES) \
+	$(t0002_SOURCES) $(t0003_SOURCES) $(t0004_SOURCES) \
+	$(t0005_SOURCES) $(t0006_SOURCES) $(t0007_SOURCES) \
+	$(t0008_SOURCES) $(toodynamic_SOURCES) $(utf8_1_SOURCES) \
+	$(utf8_2_SOURCES) $(utf8_3_SOURCES)
+DIST_SOURCES = $(am__challenge_SOURCES_DIST) $(charconv_SOURCES) \
+	$(am__collations_SOURCES_DIST) $(convert_SOURCES) \
 	$(dataread_SOURCES) $(dynamic1_SOURCES) $(iconv_fread_SOURCES) \
 	$(nulls_SOURCES) $(numeric_SOURCES) $(readconf_SOURCES) \
 	$(t0001_SOURCES) $(t0002_SOURCES) $(t0003_SOURCES) \
 	$(t0004_SOURCES) $(t0005_SOURCES) $(t0006_SOURCES) \
 	$(t0007_SOURCES) $(t0008_SOURCES) $(toodynamic_SOURCES) \
 	$(utf8_1_SOURCES) $(utf8_2_SOURCES) $(utf8_3_SOURCES)
-DIST_SOURCES = $(am__challenge_SOURCES_DIST) $(charconv_SOURCES) \
-	$(am__collations_SOURCES_DIST) $(convert_SOURCES) \
-	$(corrupt_SOURCES) $(dataread_SOURCES) $(dynamic1_SOURCES) \
-	$(iconv_fread_SOURCES) $(nulls_SOURCES) $(numeric_SOURCES) \
-	$(readconf_SOURCES) $(t0001_SOURCES) $(t0002_SOURCES) \
-	$(t0003_SOURCES) $(t0004_SOURCES) $(t0005_SOURCES) \
-	$(t0006_SOURCES) $(t0007_SOURCES) $(t0008_SOURCES) \
-	$(toodynamic_SOURCES) $(utf8_1_SOURCES) $(utf8_2_SOURCES) \
-	$(utf8_3_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -477,7 +489,6 @@ am__DIST_COMMON = $(srcdir)/Makefile.in $(top_srcdir)/depcomp \
 	$(top_srcdir)/mkinstalldirs $(top_srcdir)/test-driver
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
-ALLOCA = @ALLOCA@
 AMTAR = @AMTAR@
 AM_CFLAGS = @AM_CFLAGS@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
@@ -509,10 +520,6 @@ FGREP = @FGREP@
 FREETDS_LIBGCC = @FREETDS_LIBGCC@
 FREETDS_ODBC_MODULE = @FREETDS_ODBC_MODULE@
 FREETDS_SYMBOLIC = @FREETDS_SYMBOLIC@
-GCRYPT_CFLAGS = @GCRYPT_CFLAGS@
-GCRYPT_LIBS = @GCRYPT_LIBS@
-GNUTLS_CFLAGS = @GNUTLS_CFLAGS@
-GNUTLS_LIBS = @GNUTLS_LIBS@
 GREP = @GREP@
 HAVE_OPENSSL = @HAVE_OPENSSL@
 HAVE_PERL_SOURCES = @HAVE_PERL_SOURCES@
@@ -529,7 +536,7 @@ LIBADD_DLOPEN = @LIBADD_DLOPEN@
 LIBADD_SHL_LOAD = @LIBADD_SHL_LOAD@
 LIBICONV = @LIBICONV@
 LIBOBJS = @LIBOBJS@
-LIBS = ../libtds.la ../../replacements/libreplacements.la $(LTLIBICONV) $(NETWORK_LIBS)
+LIBS = ../libtds.la ../../replacements/libreplacements.la $(LTLIBICONV) @NETWORK_LIBS@
 LIBTOOL = @LIBTOOL@
 LIPO = @LIPO@
 LN_S = @LN_S@
@@ -537,14 +544,11 @@ LTLIBICONV = @LTLIBICONV@
 LTLIBOBJS = @LTLIBOBJS@
 LT_DLLOADERS = @LT_DLLOADERS@
 LT_DLPREOPEN = @LT_DLPREOPEN@
-LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAJOR = @MAJOR@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MINOR = @MINOR@
 MKDIR_P = @MKDIR_P@
-NETTLE_CFLAGS = @NETTLE_CFLAGS@
-NETTLE_LIBS = @NETTLE_LIBS@
 NETWORK_LIBS = @NETWORK_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -557,8 +561,6 @@ ODBCNODMLIB = @ODBCNODMLIB@
 ODBCNODMLIBAPP = @ODBCNODMLIBAPP@
 ODBC_CONFIG = @ODBC_CONFIG@
 ODBC_INC = @ODBC_INC@
-OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
-OPENSSL_LIBS = @OPENSSL_LIBS@
 OTOOL = @OTOOL@
 OTOOL64 = @OTOOL64@
 PACKAGE = @PACKAGE@
@@ -570,8 +572,6 @@ PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 PKG_CONFIG = @PKG_CONFIG@
-PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
-PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
@@ -644,19 +644,6 @@ tds_sysdep_real64_type = @tds_sysdep_real64_type@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-
-# $Id: Makefile.am,v 1.31 2011-10-31 13:58:41 freddy77 Exp $
-TESTS = t0001$(EXEEXT) t0002$(EXEEXT) t0003$(EXEEXT) t0004$(EXEEXT) \
-	t0005$(EXEEXT) t0006$(EXEEXT) t0007$(EXEEXT) t0008$(EXEEXT) \
-	dynamic1$(EXEEXT) convert$(EXEEXT) dataread$(EXEEXT) \
-	utf8_1$(EXEEXT) utf8_2$(EXEEXT) utf8_3$(EXEEXT) \
-	numeric$(EXEEXT) iconv_fread$(EXEEXT) toodynamic$(EXEEXT) \
-	readconf$(EXEEXT) charconv$(EXEEXT) nulls$(EXEEXT) \
-	corrupt$(EXEEXT) $(am__append_1)
-
-# flags test commented, not necessary for 0.62
-# TODO add flags test again when needed
-check_PROGRAMS = $(TESTS)
 t0001_SOURCES = t0001.c common.c common.h
 t0002_SOURCES = t0002.c common.c common.h
 t0003_SOURCES = t0003.c common.c common.h
@@ -678,9 +665,10 @@ iconv_fread_SOURCES = iconv_fread.c
 charconv_SOURCES = charconv.c
 toodynamic_SOURCES = toodynamic.c common.c common.h
 nulls_SOURCES = nulls.c common.c common.h
+@HAVE_SSPI_FALSE@CHALLENGE_TEST = challenge$(EXEEXT)
+@HAVE_SSPI_TRUE@CHALLENGE_TEST = 
 @HAVE_SSPI_FALSE@challenge_SOURCES = challenge.c
 readconf_SOURCES = readconf.c
-corrupt_SOURCES = corrupt.c common.c common.h
 AM_CPPFLAGS = -I$(top_srcdir)/include -I$(srcdir)/.. -I../ -DFREETDS_TOPDIR=\"$(top_srcdir)\"
 @MINGW32_FALSE@AM_LDFLAGS = -no-install -L../.libs -R $(abs_builddir)/../.libs
 @MINGW32_TRUE@AM_LDFLAGS = -no-fast-install
@@ -753,10 +741,6 @@ collations$(EXEEXT): $(collations_OBJECTS) $(collations_DEPENDENCIES) $(EXTRA_co
 convert$(EXEEXT): $(convert_OBJECTS) $(convert_DEPENDENCIES) $(EXTRA_convert_DEPENDENCIES) 
 	@rm -f convert$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(convert_OBJECTS) $(convert_LDADD) $(LIBS)
-
-corrupt$(EXEEXT): $(corrupt_OBJECTS) $(corrupt_DEPENDENCIES) $(EXTRA_corrupt_DEPENDENCIES) 
-	@rm -f corrupt$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(corrupt_OBJECTS) $(corrupt_LDADD) $(LIBS)
 
 dataread$(EXEEXT): $(dataread_OBJECTS) $(dataread_DEPENDENCIES) $(EXTRA_dataread_DEPENDENCIES) 
 	@rm -f dataread$(EXEEXT)
@@ -841,7 +825,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/collations.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/common.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/convert.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/corrupt.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dataread.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dynamic1.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/iconv_fread.Po@am__quote@
@@ -863,25 +846,22 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/utf8_3.Po@am__quote@
 
 .c.o:
-@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
-@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
-@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c -o $@ $<
 
 .c.obj:
-@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.obj$$||'`;\
-@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ `$(CYGPATH_W) '$<'` &&\
-@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
 
 .c.lo:
-@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.lo$$||'`;\
-@am__fastdepCC_TRUE@	$(LTCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
-@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Plo
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LTCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Plo
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
@@ -1204,6 +1184,13 @@ toodynamic.log: toodynamic$(EXEEXT)
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
+challenge.log: challenge$(EXEEXT)
+	@p='challenge$(EXEEXT)'; \
+	b='challenge'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
 readconf.log: readconf$(EXEEXT)
 	@p='readconf$(EXEEXT)'; \
 	b='readconf'; \
@@ -1221,20 +1208,6 @@ charconv.log: charconv$(EXEEXT)
 nulls.log: nulls$(EXEEXT)
 	@p='nulls$(EXEEXT)'; \
 	b='nulls'; \
-	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
-	--log-file $$b.log --trs-file $$b.trs \
-	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
-	"$$tst" $(AM_TESTS_FD_REDIRECT)
-corrupt.log: corrupt$(EXEEXT)
-	@p='corrupt$(EXEEXT)'; \
-	b='corrupt'; \
-	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
-	--log-file $$b.log --trs-file $$b.trs \
-	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
-	"$$tst" $(AM_TESTS_FD_REDIRECT)
-challenge.log: challenge$(EXEEXT)
-	@p='challenge$(EXEEXT)'; \
-	b='challenge'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \

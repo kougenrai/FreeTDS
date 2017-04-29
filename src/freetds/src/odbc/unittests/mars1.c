@@ -45,7 +45,7 @@ main(int argc, char *argv[])
 
 	out = 0;
 	len = sizeof(out);
-	CHKGetConnectAttr(1224, (SQLPOINTER) &out, sizeof(out), &len, "SE");
+	CHKGetConnectAttr(1224, (SQLPOINTER) &out, sizeof(out), &len, "S");
 
 	/* test we really support MARS on this connection */
 	/* TODO should out be correct ?? */
@@ -53,7 +53,6 @@ main(int argc, char *argv[])
 	if (!out || odbc_command2("BEGIN TRANSACTION", "SNoE") != SQL_ERROR) {
 		printf("MARS not supported for this connection\n");
 		odbc_disconnect();
-		odbc_test_skipped();
 		return 0;
 	}
 	odbc_read_error();

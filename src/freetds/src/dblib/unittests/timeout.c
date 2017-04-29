@@ -1,19 +1,22 @@
-/*
+/* 
  * Purpose: Test handling of timeouts with an error handler
- * Functions:  dberrhandle, dbsetlogintime, dbsettime, dbsetopt, dbclropt, dbisopt
- * \todo We test returning INT_CANCEL for a login timeout.  We don't test it for a query_timeout.
+ * Functions:  dberrhandle, dbsetlogintime, dbsettime  
+ * \todo We test returning INT_CANCEL for a login timeout.  We don't test it for a query_timeout. 
  */
 
 #include "common.h"
 #include <time.h>
 
-static int ntimeouts = 0, ncancels = 0;
-static const int max_timeouts = 2, timeout_seconds = 2;
-static time_t start_time;
+static char software_version[] = "$Id: timeout.c,v 1.8 2009-04-18 15:21:49 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
 
-static int timeout_err_handler(DBPROCESS * dbproc, int severity, int dberr, int oserr, char *dberrstr, char *oserrstr);
-static int chkintr(DBPROCESS * dbproc);
-static int hndlintr(DBPROCESS * dbproc);
+int ntimeouts = 0, ncancels = 0;
+const int max_timeouts = 3, timeout_seconds = 3;
+time_t start_time;
+
+int timeout_err_handler(DBPROCESS * dbproc, int severity, int dberr, int oserr, char *dberrstr, char *oserrstr);
+int chkintr(DBPROCESS * dbproc);
+int hndlintr(DBPROCESS * dbproc);
 
 #if !defined(SYBETIME)
 #define SYBETIME SQLETIME
@@ -21,7 +24,7 @@ static int hndlintr(DBPROCESS * dbproc);
 dbsetinterrupt(DBPROCESS *dbproc, void* hand, void* p) {}
 #endif
 
-static int
+int
 timeout_err_handler(DBPROCESS * dbproc, int severity, int dberr, int oserr, char *dberrstr, char *oserrstr)
 {
 	/*
@@ -30,7 +33,7 @@ timeout_err_handler(DBPROCESS * dbproc, int severity, int dberr, int oserr, char
 	 */
 	if (dberr == SYBESMSG)
 		return INT_CANCEL;
-
+		
 	if (dberr == SYBETIME) {
 		fprintf(stderr, "%d timeouts received in %ld seconds, ", ++ntimeouts, (long int) (time(NULL) - start_time));
 		if (ntimeouts > max_timeouts) {
@@ -40,14 +43,14 @@ timeout_err_handler(DBPROCESS * dbproc, int severity, int dberr, int oserr, char
 				return INT_CANCEL;
 			}
 			fprintf(stderr, "lost patience, cancelling (allowing 10 seconds)\n");
-			if (dbsettime(10) == FAIL)
+			if (dbsettime(10) == FAIL) 
 				fprintf(stderr, "... but dbsettime() failed in error handler\n");
 			return INT_TIMEOUT;
 		}
 		fprintf(stderr, "continuing to wait\n");
 		return INT_CONTINUE;
 	}
-
+	
 	ntimeouts = 0; /* reset */
 
 	fprintf(stderr,
@@ -64,7 +67,7 @@ timeout_err_handler(DBPROCESS * dbproc, int severity, int dberr, int oserr, char
 	 */
 	if ((dbproc == NULL) || DBDEAD(dbproc)) {
 		if (dberr != SYBECOFL) {
-			fprintf(stderr, "error: dbproc (%p) is %s, goodbye\n",
+			fprintf(stderr, "error: dbproc (%p) is %s, goodbye\n", 
 					dbproc, dbproc? (DBDEAD(dbproc)? "DEAD" : "OK") : "NULL");
 			exit(255);
 		}
@@ -73,52 +76,52 @@ timeout_err_handler(DBPROCESS * dbproc, int severity, int dberr, int oserr, char
 	return INT_CANCEL;
 }
 
-static int
+int 
 chkintr(DBPROCESS * dbproc)
 {
 	printf("in chkintr, %ld seconds elapsed\n", (long int) (time(NULL) - start_time));
 	return FALSE;
 }
 
-static int
+int 
 hndlintr(DBPROCESS * dbproc)
 {
 	printf("in hndlintr, %ld seconds elapsed\n", (long int) (time(NULL) - start_time));
 	return INT_CONTINUE;
 }
 
-static int failed = 0;
-
-static void
-test(int per_process)
+int
+main(int argc, char **argv)
 {
 	LOGINREC *login;
 	DBPROCESS *dbproc;
-	int i, r;
+	int i,r, failed = 0;
 	RETCODE erc, row_code;
 	int num_resultset = 0;
 	char teststr[1024];
-	char timeout[32];
-
-	sprintf(timeout, "%d", timeout_seconds);
-
-	ntimeouts = 0;
-	ncancels = 0;
 
 	/*
 	 * Connect to server
 	 */
+	set_malloc_options();
+	
+	read_login_info(argc, argv);
+
+	fprintf(stdout, "Starting %s\n", argv[0]);
+
+	dbinit();
+
 	dberrhandle(timeout_err_handler);
 	dbmsghandle(syb_msg_handler);
 
-	printf("About to logon\n");
+	fprintf(stdout, "About to logon\n");
 
 	login = dblogin();
 	DBSETLPWD(login, PASSWORD);
 	DBSETLUSER(login, USER);
-	DBSETLAPP(login, "#timeout");
+	DBSETLAPP(login, "#t0022");
 
-	printf("About to open %s.%s\n", SERVER, DATABASE);
+	fprintf(stdout, "About to open %s.%s\n", SERVER, DATABASE);
 
 	/*
 	 * One way to test the login timeout is to connect to a discard server (grep discard /etc/services).
@@ -126,78 +129,38 @@ test(int per_process)
 	 */
 	printf ("using %d 1-second login timeouts\n", max_timeouts);
 	dbsetlogintime(1);
-
+	
 	start_time = time(NULL);	/* keep track of when we started for reporting purposes */
 
 	if (NULL == (dbproc = dbopen(login, SERVER))){
 		fprintf(stderr, "Failed: dbopen\n");
 		exit(1);
 	}
-
+	
 	printf ("connected.\n");
 
 	if (strlen(DATABASE))
 		dbuse(dbproc, DATABASE);
-
+	
 	dbloginfree(login);
 
-	/* Set a very long global timeout. */
-	if (per_process)
-		dbsettime(5 * 60);
-
-	/* Verify no query timeout is set for this DBPROCESS */
-	if (dbisopt(dbproc, DBSETTIME, 0)) {
-		printf("unexpected return code from dbisopt() before calling dbsetopt(..., DBSETTIME, ...)\n");
-		exit(1);
-	}
-
-	if (FAIL == dbsetopt(dbproc, DBSETTIME, timeout, 0)) {
-		fprintf(stderr, "Failed: dbsetopt(..., DBSETTIME, \"%d\")\n", timeout_seconds);
-		exit(1);
-	}
-
-	/* Verify a query timeout is actually set for this DBPROCESS now */
-	if (!dbisopt(dbproc, DBSETTIME, 0)) {
-		printf("unexpected return code from dbisopt() after calling dbsetopt(..., DBSETTIME, ...)\n");
-		exit(1);
-	}
-
-	if (FAIL == dbclropt(dbproc, DBSETTIME, 0)) {
-		fprintf(stderr, "Failed: dbclropt(..., DBSETTIME, ...)\n");
-		exit(1);
-	}
-
-	/* Verify no query timeout remains set for this DBPROCESS */
-	if (dbisopt(dbproc, DBSETTIME, 0)) {
-		printf("unexpected return code from dbisopt() after calling dbclropt(..., DBSETTIME, ...)\n");
-		exit(1);
-	}
-
-	printf ("using %d %d-second query timeouts\n", max_timeouts, timeout_seconds);
-	if (per_process) {
-		if (FAIL == dbsetopt(dbproc, DBSETTIME, timeout, 0)) {
-			fprintf(stderr, "Failed: dbsetopt(..., DBSETTIME, \"%d\")\n", timeout_seconds);
-			exit(1);
-		}
-	} else {
-		if (FAIL == dbsettime(timeout_seconds)) {
-			fprintf(stderr, "Failed: dbsettime\n");
-			exit(1);
-		}
-	}
-
 	/* send something that will take awhile to execute */
+	printf ("using %d %d-second query timeouts\n", max_timeouts, timeout_seconds);
+	if (FAIL == dbsettime(timeout_seconds)) {
+		fprintf(stderr, "Failed: dbsettime\n");
+		exit(1);
+	}
 	printf ("issuing a query that will take 30 seconds\n");
 
 	if (FAIL == sql_cmd(dbproc)) {
 		fprintf(stderr, "Failed: dbcmd\n");
 		exit(1);
 	}
-
-	start_time = time(NULL);	/* keep track of when we started for reporting purposes */
+	
+	start_time = time(NULL);
 	ntimeouts = 0;
 	dbsetinterrupt(dbproc, (void*)chkintr, (void*)hndlintr);
-
+	
 	if (FAIL == dbsqlsend(dbproc)) {
 		fprintf(stderr, "Failed: dbsend\n");
 		exit(1);
@@ -246,11 +209,6 @@ test(int per_process)
 				failed++;
 				printf("error: dbrows() returned SUCCEED, but dbcount() returned -1\n");
 			}
-
-			if (FAIL == dbclropt(dbproc, DBSETTIME, 0)) {
-				failed++;
-				printf("error: dbclropt(dbproc, DBSETTIME, ...) failed\n");
-			}
 			break;
 		case FAIL:
 			printf("dbresults returned FAIL\n");
@@ -259,29 +217,14 @@ test(int per_process)
 			printf("unexpected return code %d from dbresults\n", erc);
 			exit(1);
 		}
-		if (i > 1) {
+		if ( i > 1) {
 			failed++;
 			break;
 		}
 	} /* while dbresults */
-}
-
-int
-main(int argc, char **argv)
-{
-	set_malloc_options();
-
-	read_login_info(argc, argv);
-
-	fprintf(stdout, "Starting %s\n", argv[0]);
-
-	dbinit();
-
-	test(0);
-	test(1);
-
+	
 	dbexit();
 
-	printf("%s %s\n", __FILE__, (failed ? "failed!" : "OK"));
+	fprintf(stdout, "%s %s\n", __FILE__, (failed ? "failed!" : "OK"));
 	return failed ? 1 : 0;
 }

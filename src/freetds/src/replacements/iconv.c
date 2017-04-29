@@ -45,6 +45,8 @@
 #include <freetds/bytes.h>
 #include <freetds/iconv.h>
 
+TDS_RCSID(var, "$Id: iconv.c,v 1.22 2011-05-16 08:51:40 freddy77 Exp $");
+
 /**
  * \addtogroup conv
  * @{ 
@@ -80,17 +82,6 @@ static const unsigned char utf8_masks[7] = {
 	0, 0x7f, 0x1f, 0x0f, 0x07, 0x03, 0x01
 };
 
-/*
- * Return values for get_*:
- * - >0 bytes readed
- * - -EINVAL not enough data to read
- * - -EILSEQ invalid encoding detected
- * Return values for put_*:
- * - >0 bytes written
- * - -E2BIG no space left on output
- * - -EILSEQ character can't be encoded in output charset
- */
-
 static int
 get_utf8(const unsigned char *p, size_t len, ICONV_CHAR *out)
 {
@@ -116,6 +107,7 @@ put_utf8(unsigned char *buf, size_t buf_len, ICONV_CHAR c)
 {
 #define MASK(n) ((0xffffffffu << (n)) & 0xffffffffu)
 	size_t o_len;
+	unsigned mask;
 
 	if ((c & MASK(7)) == 0) {
 		if (buf_len < 1)
@@ -139,18 +131,22 @@ put_utf8(unsigned char *buf, size_t buf_len, ICONV_CHAR c)
 			break;
 		++o_len;
 		if ((c & MASK(31)) != 0)
-			return -EILSEQ;
+			return -EINVAL;
 	}
 
 	if (buf_len < o_len)
 		return -E2BIG;
 	buf += o_len;
-	buf_len = o_len - 1;
-	do {
+	mask = 0xff80;
+	for (;;) {
 		*--buf = 0x80 | (c & 0x3f);
 		c >>= 6;
-	} while (--buf_len);
-	*--buf = (0xff00u >> o_len) | c;
+		mask >>= 1;
+		if (c < 0x40) {
+			*--buf = mask | c;
+			break;
+		}
+	}
 	return o_len;
 }
 
@@ -343,11 +339,11 @@ tds_sys_iconv_open (const char* tocode, const char* fromcode)
 
 	static char first_time = 1;
 
-	if (TDS_UNLIKELY(first_time)) {
+	if (first_time) {
 		first_time = 0;
 		tdsdump_log(TDS_DBG_INFO1, "Using trivial iconv\n");
 	}
-
+	
 	/* match both inputs to our canonical names */
 	enc_name = fromcode;
 	for (i=0; i < 2; ++i) {
@@ -439,14 +435,12 @@ tds_sys_iconv (iconv_t cd, const char* * inbuf, size_t *inbytesleft, char* * out
 			ICONV_CHAR out_c;
 			int readed = get_func(ib, il, &out_c), written;
 
-			TDS_EXTRA_CHECK(assert(readed > 0 || readed == -EINVAL || readed == -EILSEQ));
 			if (TDS_UNLIKELY(readed < 0)) {
 				local_errno = -readed;
 				break;
 			}
 
 			written = put_func(ob, ol, out_c);
-			TDS_EXTRA_CHECK(assert(written > 0 || written == -E2BIG || written == -EILSEQ));
 			if (TDS_UNLIKELY(written < 0)) {
 				local_errno = -written;
 				break;

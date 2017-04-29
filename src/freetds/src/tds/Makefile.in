@@ -14,6 +14,8 @@
 
 @SET_MAKE@
 
+# $Id: Makefile.am,v 1.74 2012-03-06 20:40:12 freddy77 Exp $
+
 
 VPATH = @srcdir@
 am__is_gnu_make = { \
@@ -103,10 +105,11 @@ am__aclocal_m4_deps =  \
 	$(top_srcdir)/m4/acx_pthread.m4 \
 	$(top_srcdir)/m4/ax_cflags_gcc_option.m4 \
 	$(top_srcdir)/m4/check_openssl.m4 \
-	$(top_srcdir)/m4/gettimemilli.m4 $(top_srcdir)/m4/libtool.m4 \
+	$(top_srcdir)/m4/gettimemilli.m4 $(top_srcdir)/m4/iconv.m4 \
+	$(top_srcdir)/m4/lib-ld.m4 $(top_srcdir)/m4/lib-link.m4 \
+	$(top_srcdir)/m4/lib-prefix.m4 $(top_srcdir)/m4/libtool.m4 \
 	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
 	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
-	$(top_srcdir)/m4/pushlibs.m4 \
 	$(top_srcdir)/m4/sprintf_i64_format.m4 \
 	$(top_srcdir)/m4/type_socklen_t.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
@@ -118,24 +121,20 @@ CONFIG_HEADER = $(top_builddir)/include/config.h
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
-am__DEPENDENCIES_1 =
-libtds_la_DEPENDENCIES = $(am__DEPENDENCIES_1)
+libtds_la_DEPENDENCIES =
 am__libtds_la_SOURCES_DIST = mem.c token.c util.c login.c read.c \
 	write.c convert.c numeric.c config.c query.c iconv.c locale.c \
 	threadsafe.c vstrbuild.c tdsstring.c getmac.c data.c net.c \
-	tls.c tds_checks.c log.c dlist.c bulk.c packet.c stream.c \
-	random.c sec_negotiate_gnutls.h sec_negotiate_openssl.h \
-	sec_negotiate.c challenge.c md4.c md5.c des.c gssapi.c \
-	hmac_md5.c sspi.c
+	tls.c tds_checks.c tds_checks.h log.c bulk.c packet.c stream.c \
+	challenge.c md4.c md5.c des.c gssapi.c hmac_md5.c sspi.c
 @HAVE_SSPI_FALSE@am__objects_1 = challenge.lo md4.lo md5.lo des.lo \
 @HAVE_SSPI_FALSE@	gssapi.lo hmac_md5.lo
 @HAVE_SSPI_TRUE@am__objects_1 = sspi.lo
 am_libtds_la_OBJECTS = mem.lo token.lo util.lo login.lo read.lo \
 	write.lo convert.lo numeric.lo config.lo query.lo iconv.lo \
 	locale.lo threadsafe.lo vstrbuild.lo tdsstring.lo getmac.lo \
-	data.lo net.lo tls.lo tds_checks.lo log.lo dlist.lo bulk.lo \
-	packet.lo stream.lo random.lo sec_negotiate.lo \
-	$(am__objects_1)
+	data.lo net.lo tls.lo tds_checks.lo log.lo bulk.lo packet.lo \
+	stream.lo $(am__objects_1)
 libtds_la_OBJECTS = $(am_libtds_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -251,7 +250,6 @@ am__relativize = \
   done; \
   reldir="$$dir2"
 ACLOCAL = @ACLOCAL@
-ALLOCA = @ALLOCA@
 AMTAR = @AMTAR@
 AM_CFLAGS = @AM_CFLAGS@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
@@ -283,10 +281,6 @@ FGREP = @FGREP@
 FREETDS_LIBGCC = @FREETDS_LIBGCC@
 FREETDS_ODBC_MODULE = @FREETDS_ODBC_MODULE@
 FREETDS_SYMBOLIC = @FREETDS_SYMBOLIC@
-GCRYPT_CFLAGS = @GCRYPT_CFLAGS@
-GCRYPT_LIBS = @GCRYPT_LIBS@
-GNUTLS_CFLAGS = @GNUTLS_CFLAGS@
-GNUTLS_LIBS = @GNUTLS_LIBS@
 GREP = @GREP@
 HAVE_OPENSSL = @HAVE_OPENSSL@
 HAVE_PERL_SOURCES = @HAVE_PERL_SOURCES@
@@ -311,14 +305,11 @@ LTLIBICONV = @LTLIBICONV@
 LTLIBOBJS = @LTLIBOBJS@
 LT_DLLOADERS = @LT_DLLOADERS@
 LT_DLPREOPEN = @LT_DLPREOPEN@
-LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAJOR = @MAJOR@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MINOR = @MINOR@
 MKDIR_P = @MKDIR_P@
-NETTLE_CFLAGS = @NETTLE_CFLAGS@
-NETTLE_LIBS = @NETTLE_LIBS@
 NETWORK_LIBS = @NETWORK_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -331,8 +322,6 @@ ODBCNODMLIB = @ODBCNODMLIB@
 ODBCNODMLIBAPP = @ODBCNODMLIBAPP@
 ODBC_CONFIG = @ODBC_CONFIG@
 ODBC_INC = @ODBC_INC@
-OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
-OPENSSL_LIBS = @OPENSSL_LIBS@
 OTOOL = @OTOOL@
 OTOOL64 = @OTOOL64@
 PACKAGE = @PACKAGE@
@@ -344,8 +333,6 @@ PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 PKG_CONFIG = @PKG_CONFIG@
-PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
-PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
@@ -429,13 +416,12 @@ libtds_la_SOURCES = mem.c token.c util.c login.c read.c \
 	write.c convert.c numeric.c config.c query.c iconv.c \
 	locale.c threadsafe.c vstrbuild.c \
 	tdsstring.c getmac.c data.c net.c tls.c \
-	tds_checks.c log.c dlist.c \
-	bulk.c packet.c stream.c random.c \
-	sec_negotiate_gnutls.h sec_negotiate_openssl.h sec_negotiate.c \
+	tds_checks.c tds_checks.h log.c \
+	bulk.c packet.c stream.c \
 	$(AUTH_FILES)
 
 libtds_la_LDFLAGS = 
-libtds_la_LIBADD = $(NETWORK_LIBS)
+libtds_la_LIBADD = 
 noinst_HEADERS = tds_willconvert.h encodings.h num_limits.h tds_types.h
 EXTRA_DIST = tds_willconvert.h encodings.h num_limits.h tds_types.h \
 	CMakeLists.txt $(AUTH_FILES_DIST)
@@ -502,7 +488,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/convert.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/data.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/des.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dlist.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/getmac.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gssapi.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hmac_md5.Plo@am__quote@
@@ -517,9 +502,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/numeric.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/packet.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/query.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/random.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/read.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sec_negotiate.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sspi.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/stream.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tds_checks.Plo@am__quote@
@@ -532,25 +515,22 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/write.Plo@am__quote@
 
 .c.o:
-@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
-@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
-@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c -o $@ $<
 
 .c.obj:
-@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.obj$$||'`;\
-@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ `$(CYGPATH_W) '$<'` &&\
-@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
 
 .c.lo:
-@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.lo$$||'`;\
-@am__fastdepCC_TRUE@	$(LTCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
-@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Plo
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LTCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Plo
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
@@ -846,6 +826,15 @@ uninstall-am:
 .PRECIOUS: Makefile
 
 
+@HAVE_DOXYGEN_TRUE@doxyfile: $(srcdir)/tds.dox
+@HAVE_DOXYGEN_TRUE@	cp $(srcdir)/tds.dox doxyfile
+
+@HAVE_DOXYGEN_TRUE@doxy: doxyfile  $(libtds_la_SOURCES)
+@HAVE_DOXYGEN_TRUE@	SRCDIR=$(srcdir); \
+@HAVE_DOXYGEN_TRUE@	TOP_SRCDIR=$(top_srcdir); \
+@HAVE_DOXYGEN_TRUE@	export SRCDIR TOP_SRCDIR; \
+@HAVE_DOXYGEN_TRUE@	$(DOXYGEN) doxyfile
+
 # Perl is needed to build from a repository checkout.
 # Perl is *not* needed to build from a tarball.  
 
@@ -855,7 +844,7 @@ data.c:	tds_types.h
 @HAVE_PERL_SOURCES_TRUE@	cd $(srcdir) && rm -f $(BUILT_SOURCES)
 
 @HAVE_PERL_SOURCES_TRUE@tds_willconvert.h: tds_willconvert.pl Makefile
-@HAVE_PERL_SOURCES_TRUE@	perl $(srcdir)/tds_willconvert.pl $(top_srcdir)/include/freetds/proto.h > $@.tmp
+@HAVE_PERL_SOURCES_TRUE@	perl $(srcdir)/tds_willconvert.pl > $@.tmp
 @HAVE_PERL_SOURCES_TRUE@	mv $@.tmp $@
 
 @HAVE_PERL_SOURCES_TRUE@encodings.h: encodings.pl alternative_character_sets.h Makefile
@@ -866,7 +855,7 @@ data.c:	tds_types.h
 @HAVE_PERL_SOURCES_TRUE@	perl $(srcdir)/num_limits.pl > $@.tmp
 @HAVE_PERL_SOURCES_TRUE@	mv $@.tmp $@
 
-@HAVE_PERL_SOURCES_TRUE@tds_types.h: types.pl Makefile $(top_srcdir)/misc/types.csv
+@HAVE_PERL_SOURCES_TRUE@tds_types.h: types.pl Makefile ../../misc/types.csv
 @HAVE_PERL_SOURCES_TRUE@	perl $(srcdir)/types.pl $(top_srcdir)/misc/types.csv $(top_srcdir)/include/freetds/proto.h > $@.tmp
 @HAVE_PERL_SOURCES_TRUE@	mv $@.tmp $@
 

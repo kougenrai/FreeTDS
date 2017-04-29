@@ -3,6 +3,9 @@
 
 /* Test using array binding */
 
+static char software_version[] = "$Id: array.c,v 1.18 2011-07-12 10:16:59 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
+
 static SQLTCHAR *test_query = NULL;
 static int multiply = 90;
 static int failure = 0;
@@ -24,8 +27,8 @@ query_test(int prepare, SQLRETURN expected, const char *expected_status)
 	SQLULEN processed;
 	RETCODE ret;
 	char status[20];
-	SQLTCHAR *err = (SQLTCHAR *) ODBC_GET(sizeof(odbc_err)*sizeof(SQLTCHAR));
-	SQLTCHAR *state = (SQLTCHAR *) ODBC_GET(sizeof(odbc_sqlstate)*sizeof(SQLTCHAR));
+	SQLTCHAR *err = ODBC_GET(sizeof(odbc_err)*sizeof(SQLTCHAR));
+	SQLTCHAR *state = ODBC_GET(sizeof(odbc_sqlstate)*sizeof(SQLTCHAR));
 
 	assert(odbc_stmt != SQL_NULL_HSTMT);
 	odbc_reset_statement();

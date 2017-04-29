@@ -3,18 +3,21 @@ SUBDIRS		=	. unittests
 AM_CPPFLAGS	=	-I$(top_srcdir)/include
 
 lib_LTLIBRARIES	=	libsybdb.la
-libsybdb_la_SOURCES=	dblib.c dbutil.c rpc.c bcp.c xact.c dbpivot.c
 if SYBASE_COMPAT
-libsybdb_la_SOURCES +=	dbopen.c
+DBOPEN=dbopen.c
 endif
 if MINGW32
-libsybdb_la_SOURCES +=	winmain.c
+MINGW_SOURCES   =	../../win32/initnet.c
+else
+MINGW_SOURCES   =
 endif
-EXTRA_DIST	=	dbopen.c buffering.h CMakeLists.txt winmain.c dblib.def
-# bumped for dbanydatecrack
-libsybdb_la_LDFLAGS=	-version-info 6:0:1 $(FREETDS_SYMBOLIC)
-if !MACOSX
-libsybdb_la_LDFLAGS +=	-export-symbols-regex '^(db|bcp_|tdsdump_open|tdsdbopen|.*_xact|close_commit|open_commit|.?asprintf).*'
+EXTRA_DIST	=	dbopen.c buffering.h CMakeLists.txt
+libsybdb_la_SOURCES=	dblib.c dbutil.c rpc.c bcp.c xact.c dbpivot.c $(DBOPEN) $(MINGW_SOURCES)
+if MACOSX
+SYMBOLS		=
+else
+SYMBOLS		=	-export-symbols-regex '^(db|bcp_|tdsdump_open|tdsdbopen|.*_xact|close_commit|open_commit|.?asprintf).*'
 endif
-libsybdb_la_LIBADD=	../tds/libtds.la ../replacements/libreplacements.la $(LTLIBICONV) $(FREETDS_LIBGCC)
+libsybdb_la_LDFLAGS=	-version-info 5:0:0 $(SYMBOLS) $(FREETDS_SYMBOLIC)
+libsybdb_la_LIBADD=	../tds/libtds.la ../replacements/libreplacements.la $(NETWORK_LIBS) $(LTLIBICONV) $(FREETDS_LIBGCC)
 

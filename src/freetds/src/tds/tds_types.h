@@ -6,7 +6,7 @@
  * Return the number of bytes needed by specified type.
  */
 int
-tds_get_size_by_type(TDS_SERVER_TYPE servertype)
+tds_get_size_by_type(int servertype)
 {
 	switch (servertype) {
 	case SYBVOID:
@@ -32,8 +32,6 @@ tds_get_size_by_type(TDS_SERVER_TYPE servertype)
 	case SYBTIMEN:
 	case SYBUINT4:
 		return 4;
-	case SYB5BIGDATETIME:
-	case SYB5BIGTIME:
 	case SYB5INT8:
 	case SYBDATETIME:
 	case SYBFLT8:
@@ -45,7 +43,7 @@ tds_get_size_by_type(TDS_SERVER_TYPE servertype)
 	case SYBUNIQUE:
 		return 16;
 	default:
-		return 0;
+		return -1;
 	}
 }
 
@@ -121,8 +119,8 @@ tds_get_varint_size(TDSCONNECTION * conn, int datatype)
  * @param colsize size of type
  * @result type for conversion
  */
-TDS_SERVER_TYPE
-tds_get_conversion_type(TDS_SERVER_TYPE srctype, int colsize)
+int
+tds_get_conversion_type(int srctype, int colsize)
 {
 	switch (srctype) {
 	case SYBBITN:
@@ -181,8 +179,6 @@ tds_get_conversion_type(TDS_SERVER_TYPE srctype, int colsize)
 		break;
 	case SYB5INT8:
 		return SYBINT8;
-	default:
-		break;
 	}
 	return srctype;
 }
@@ -228,28 +224,28 @@ const unsigned char tds_type_flags_ms[256] = {
 	/*  37 SYBVARBINARY         */	TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_VARIABLE,
 	/*  38 SYBINTN              */	TDS_TYPEFLAG_NULLABLE,
 	/*  39 SYBVARCHAR           */	TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_VARIABLE|TDS_TYPEFLAG_ASCII,
-	/*  40 SYBMSDATE            */	TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_FIXED|TDS_TYPEFLAG_DATETIME,
-	/*  41 SYBMSTIME            */	TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_DATETIME,
-	/*  42 SYBMSDATETIME2       */	TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_DATETIME,
-	/*  43 SYBMSDATETIMEOFFSET  */	TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_DATETIME,
+	/*  40 SYBMSDATE            */	TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_FIXED,
+	/*  41 SYBMSTIME            */	TDS_TYPEFLAG_NULLABLE,
+	/*  42 SYBMSDATETIME2       */	TDS_TYPEFLAG_NULLABLE,
+	/*  43 SYBMSDATETIMEOFFSET  */	TDS_TYPEFLAG_NULLABLE,
 	/*  44 empty                */	TDS_TYPEFLAG_INVALID,
 	/*  45 SYBBINARY            */	TDS_TYPEFLAG_VARIABLE,
 	/*  46 empty                */	TDS_TYPEFLAG_INVALID|TDS_TYPEFLAG_FIXED,
 	/*  47 SYBCHAR              */	TDS_TYPEFLAG_VARIABLE|TDS_TYPEFLAG_ASCII,
 	/*  48 SYBINT1              */	TDS_TYPEFLAG_FIXED,
-	/*  49 empty                */	TDS_TYPEFLAG_INVALID|TDS_TYPEFLAG_FIXED|TDS_TYPEFLAG_DATETIME,
+	/*  49 empty                */	TDS_TYPEFLAG_INVALID|TDS_TYPEFLAG_FIXED,
 	/*  50 SYBBIT               */	TDS_TYPEFLAG_FIXED,
-	/*  51 empty                */	TDS_TYPEFLAG_INVALID|TDS_TYPEFLAG_FIXED|TDS_TYPEFLAG_DATETIME,
+	/*  51 empty                */	TDS_TYPEFLAG_INVALID|TDS_TYPEFLAG_FIXED,
 	/*  52 SYBINT2              */	TDS_TYPEFLAG_FIXED,
 	/*  53 empty                */	TDS_TYPEFLAG_INVALID,
 	/*  54 empty                */	TDS_TYPEFLAG_INVALID,
 	/*  55 empty                */	TDS_TYPEFLAG_INVALID,
 	/*  56 SYBINT4              */	TDS_TYPEFLAG_FIXED,
 	/*  57 empty                */	TDS_TYPEFLAG_INVALID,
-	/*  58 SYBDATETIME4         */	TDS_TYPEFLAG_FIXED|TDS_TYPEFLAG_DATETIME,
+	/*  58 SYBDATETIME4         */	TDS_TYPEFLAG_FIXED,
 	/*  59 SYBREAL              */	TDS_TYPEFLAG_FIXED,
 	/*  60 SYBMONEY             */	TDS_TYPEFLAG_FIXED,
-	/*  61 SYBDATETIME          */	TDS_TYPEFLAG_FIXED|TDS_TYPEFLAG_DATETIME,
+	/*  61 SYBDATETIME          */	TDS_TYPEFLAG_FIXED,
 	/*  62 SYBFLT8              */	TDS_TYPEFLAG_FIXED,
 	/*  63 empty                */	TDS_TYPEFLAG_INVALID,
 	/*  64 empty                */	TDS_TYPEFLAG_INVALID|TDS_TYPEFLAG_FIXED,
@@ -299,7 +295,7 @@ const unsigned char tds_type_flags_ms[256] = {
 	/* 108 SYBNUMERIC           */	TDS_TYPEFLAG_NUMERIC,
 	/* 109 SYBFLTN              */	TDS_TYPEFLAG_NULLABLE,
 	/* 110 SYBMONEYN            */	TDS_TYPEFLAG_NULLABLE,
-	/* 111 SYBDATETIMN          */	TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_DATETIME,
+	/* 111 SYBDATETIMN          */	TDS_TYPEFLAG_NULLABLE,
 	/* 112 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 113 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 114 empty                */	TDS_TYPEFLAG_INVALID,
@@ -311,7 +307,7 @@ const unsigned char tds_type_flags_ms[256] = {
 	/* 120 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 121 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 122 SYBMONEY4            */	TDS_TYPEFLAG_FIXED,
-	/* 123 empty                */	TDS_TYPEFLAG_INVALID|TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_DATETIME,
+	/* 123 empty                */	TDS_TYPEFLAG_INVALID|TDS_TYPEFLAG_NULLABLE,
 	/* 124 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 125 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 126 empty                */	TDS_TYPEFLAG_INVALID,
@@ -335,7 +331,7 @@ const unsigned char tds_type_flags_ms[256] = {
 	/* 144 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 145 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 146 empty                */	TDS_TYPEFLAG_INVALID,
-	/* 147 empty                */	TDS_TYPEFLAG_INVALID|TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_DATETIME,
+	/* 147 empty                */	TDS_TYPEFLAG_INVALID|TDS_TYPEFLAG_NULLABLE,
 	/* 148 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 149 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 150 empty                */	TDS_TYPEFLAG_INVALID,
@@ -375,8 +371,8 @@ const unsigned char tds_type_flags_ms[256] = {
 	/* 184 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 185 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 186 empty                */	TDS_TYPEFLAG_INVALID,
-	/* 187 empty                */	TDS_TYPEFLAG_INVALID|TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_DATETIME,
-	/* 188 empty                */	TDS_TYPEFLAG_INVALID|TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_DATETIME,
+	/* 187 empty                */	TDS_TYPEFLAG_INVALID,
+	/* 188 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 189 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 190 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 191 empty                */	TDS_TYPEFLAG_INVALID|TDS_TYPEFLAG_FIXED,
@@ -488,28 +484,28 @@ const unsigned char tds_type_flags_syb[256] = {
 	/*  37 SYBVARBINARY         */	TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_VARIABLE,
 	/*  38 SYBINTN              */	TDS_TYPEFLAG_NULLABLE,
 	/*  39 SYBVARCHAR           */	TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_VARIABLE|TDS_TYPEFLAG_ASCII,
-	/*  40 empty                */	TDS_TYPEFLAG_INVALID|TDS_TYPEFLAG_FIXED|TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_DATETIME,
-	/*  41 empty                */	TDS_TYPEFLAG_INVALID|TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_DATETIME,
-	/*  42 empty                */	TDS_TYPEFLAG_INVALID|TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_DATETIME,
-	/*  43 empty                */	TDS_TYPEFLAG_INVALID|TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_DATETIME,
+	/*  40 empty                */	TDS_TYPEFLAG_INVALID|TDS_TYPEFLAG_FIXED|TDS_TYPEFLAG_NULLABLE,
+	/*  41 empty                */	TDS_TYPEFLAG_INVALID|TDS_TYPEFLAG_NULLABLE,
+	/*  42 empty                */	TDS_TYPEFLAG_INVALID|TDS_TYPEFLAG_NULLABLE,
+	/*  43 empty                */	TDS_TYPEFLAG_INVALID|TDS_TYPEFLAG_NULLABLE,
 	/*  44 empty                */	TDS_TYPEFLAG_INVALID,
 	/*  45 SYBBINARY            */	TDS_TYPEFLAG_VARIABLE,
 	/*  46 SYBINTERVAL          */	TDS_TYPEFLAG_FIXED,
 	/*  47 SYBCHAR              */	TDS_TYPEFLAG_VARIABLE|TDS_TYPEFLAG_ASCII,
 	/*  48 SYBINT1              */	TDS_TYPEFLAG_FIXED,
-	/*  49 SYBDATE              */	TDS_TYPEFLAG_FIXED|TDS_TYPEFLAG_DATETIME,
+	/*  49 SYBDATE              */	TDS_TYPEFLAG_FIXED,
 	/*  50 SYBBIT               */	TDS_TYPEFLAG_FIXED,
-	/*  51 SYBTIME              */	TDS_TYPEFLAG_FIXED|TDS_TYPEFLAG_DATETIME,
+	/*  51 SYBTIME              */	TDS_TYPEFLAG_FIXED,
 	/*  52 SYBINT2              */	TDS_TYPEFLAG_FIXED,
 	/*  53 empty                */	TDS_TYPEFLAG_INVALID,
 	/*  54 empty                */	TDS_TYPEFLAG_INVALID,
 	/*  55 empty                */	TDS_TYPEFLAG_INVALID,
 	/*  56 SYBINT4              */	TDS_TYPEFLAG_FIXED,
 	/*  57 empty                */	TDS_TYPEFLAG_INVALID,
-	/*  58 SYBDATETIME4         */	TDS_TYPEFLAG_FIXED|TDS_TYPEFLAG_DATETIME,
+	/*  58 SYBDATETIME4         */	TDS_TYPEFLAG_FIXED,
 	/*  59 SYBREAL              */	TDS_TYPEFLAG_FIXED,
 	/*  60 SYBMONEY             */	TDS_TYPEFLAG_FIXED,
-	/*  61 SYBDATETIME          */	TDS_TYPEFLAG_FIXED|TDS_TYPEFLAG_DATETIME,
+	/*  61 SYBDATETIME          */	TDS_TYPEFLAG_FIXED,
 	/*  62 SYBFLT8              */	TDS_TYPEFLAG_FIXED,
 	/*  63 empty                */	TDS_TYPEFLAG_INVALID,
 	/*  64 SYBUINT1             */	TDS_TYPEFLAG_FIXED,
@@ -559,7 +555,7 @@ const unsigned char tds_type_flags_syb[256] = {
 	/* 108 SYBNUMERIC           */	TDS_TYPEFLAG_NUMERIC,
 	/* 109 SYBFLTN              */	TDS_TYPEFLAG_NULLABLE,
 	/* 110 SYBMONEYN            */	TDS_TYPEFLAG_NULLABLE,
-	/* 111 SYBDATETIMN          */	TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_DATETIME,
+	/* 111 SYBDATETIMN          */	TDS_TYPEFLAG_NULLABLE,
 	/* 112 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 113 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 114 empty                */	TDS_TYPEFLAG_INVALID,
@@ -571,7 +567,7 @@ const unsigned char tds_type_flags_syb[256] = {
 	/* 120 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 121 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 122 SYBMONEY4            */	TDS_TYPEFLAG_FIXED,
-	/* 123 SYBDATEN             */	TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_DATETIME,
+	/* 123 SYBDATEN             */	TDS_TYPEFLAG_NULLABLE,
 	/* 124 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 125 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 126 empty                */	TDS_TYPEFLAG_INVALID,
@@ -595,7 +591,7 @@ const unsigned char tds_type_flags_syb[256] = {
 	/* 144 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 145 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 146 empty                */	TDS_TYPEFLAG_INVALID,
-	/* 147 SYBTIMEN             */	TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_DATETIME,
+	/* 147 SYBTIMEN             */	TDS_TYPEFLAG_NULLABLE,
 	/* 148 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 149 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 150 empty                */	TDS_TYPEFLAG_INVALID,
@@ -615,7 +611,7 @@ const unsigned char tds_type_flags_syb[256] = {
 	/* 164 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 165 empty                */	TDS_TYPEFLAG_INVALID|TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_VARIABLE,
 	/* 166 empty                */	TDS_TYPEFLAG_INVALID,
-	/* 167 empty                */	TDS_TYPEFLAG_INVALID|TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_VARIABLE,
+	/* 167 empty                */	TDS_TYPEFLAG_INVALID|TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_VARIABLE|TDS_TYPEFLAG_ASCII,
 	/* 168 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 169 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 170 empty                */	TDS_TYPEFLAG_INVALID,
@@ -635,8 +631,8 @@ const unsigned char tds_type_flags_syb[256] = {
 	/* 184 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 185 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 186 empty                */	TDS_TYPEFLAG_INVALID,
-	/* 187 SYB5BIGDATETIME      */	TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_DATETIME,
-	/* 188 SYB5BIGTIME          */	TDS_TYPEFLAG_NULLABLE|TDS_TYPEFLAG_DATETIME,
+	/* 187 empty                */	TDS_TYPEFLAG_INVALID,
+	/* 188 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 189 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 190 empty                */	TDS_TYPEFLAG_INVALID,
 	/* 191 SYB5INT8             */	TDS_TYPEFLAG_FIXED,
@@ -894,8 +890,8 @@ const char *const tds_type_names[256] = {
 	/* 184 */	"",
 	/* 185 */	"",
 	/* 186 */	"",
-	/* 187 */	"SYB5BIGDATETIME",
-	/* 188 */	"SYB5BIGTIME",
+	/* 187 */	"",
+	/* 188 */	"",
 	/* 189 */	"",
 	/* 190 */	"",
 	/* 191 */	"SYB5INT8",

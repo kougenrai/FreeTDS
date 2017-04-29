@@ -9,6 +9,9 @@
  * and declared in odbcss.h
  */
 
+static char software_version[] = "$Id: compute.c,v 1.14 2011-07-12 10:16:59 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
+
 static char col1[256], col2[256];
 static SQLLEN ind1, ind2;
 
@@ -74,12 +77,6 @@ int
 main(int argc, char *argv[])
 {
 	odbc_connect();
-
-	/* MSSQL 2012+, compute not supported */
-	if (odbc_db_is_microsoft() && odbc_db_version_int() >= 0x0b000000u) {
-		odbc_disconnect();
-		return 0;
-	}
 
 	odbc_command("create table #tmp1 (c varchar(20), i int)");
 	odbc_command("insert into #tmp1 values('pippo', 12)");

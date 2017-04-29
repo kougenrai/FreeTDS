@@ -24,6 +24,9 @@
 #include "ctlib.h"
 #endif
 
+static char software_version[] = "$Id: common.c,v 1.25 2012-03-03 09:20:12 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
+
 char USER[512];
 char SERVER[512];
 char PASSWORD[512];
@@ -120,7 +123,7 @@ establish_login(int argc, char **argv)
 	int ch;
 #endif
 
-	BASENAME = basename((char *)argv[0]);
+	BASENAME = tds_basename((char *)argv[0]);
 	DIRNAME = dirname((char *)argv[0]);
 	
 #if !defined(__MINGW32__) && !defined(_MSC_VER)
@@ -424,26 +427,4 @@ servermsg_cb(CS_CONTEXT * context, CS_CONNECTION * connection, CS_SERVERMSG * sr
 	fprintf(stderr, "\t\"%s\"\n", srvmsg->text);
 
 	return CS_SUCCEED;
-}
-
-const char *
-res_type_str(CS_RETCODE ret)
-{
-	static char str[64];
-
-#define S(s) case s: return #s;
-	switch ((int) ret) {
-	S(CS_ROW_RESULT)
-	S(CS_PARAM_RESULT)
-	S(CS_STATUS_RESULT)
-	S(CS_MSG_RESULT)
-	S(CS_CMD_SUCCEED)
-	S(CS_CMD_DONE)
-	S(CS_CMD_FAIL)
-	S(CS_COMPUTE_RESULT)
-#undef S
-	}
-
-	sprintf(str, "?? (%d)", (int) ret);
-	return str;
 }

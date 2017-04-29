@@ -15,15 +15,14 @@
 #include <netinet/in.h>
 #endif /* HAVE_NETINET_IN_H */
 
-#if defined(UNIXODBC) || defined(_WIN32)
-#include <odbcinst.h>
-#endif
-
 #ifndef _WIN32
 #include <freetds/sysdep_private.h>
 #else
 #define TDS_SDIR_SEPARATOR "\\"
 #endif
+
+static char software_version[] = "$Id: common.c,v 1.63 2012-03-11 13:10:58 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
 
 HENV odbc_env;
 HDBC odbc_conn;
@@ -37,6 +36,7 @@ char odbc_password[512];
 char odbc_database[512];
 char odbc_driver[1024];
 
+#ifndef _WIN32
 static int
 check_lib(char *path, const char *file)
 {
@@ -52,6 +52,7 @@ check_lib(char *path, const char *file)
 	path[len] = 0;
 	return 0;
 }
+#endif
 
 /* some platforms do not have setenv, define a replacement */
 #if !HAVE_SETENV
@@ -67,20 +68,6 @@ odbc_setenv(const char *name, const char *value, int overwrite)
 }
 #endif
 
-/* this should be extended with all possible systems... */
-static const char *const search_driver[] = {
-	".libs/libtdsodbc.so",
-	".libs/libtdsodbc.sl",
-	".libs/libtdsodbc.dylib",
-	".libs/libtdsodbc.dll",
-	"_libs/libtdsodbc.dll",
-	"debug/tdsodbc.dll",
-	"release/tdsodbc.dll",
-	"libtdsodbc.so",
-	"tdsodbc.dll",
-	NULL
-};
-
 int
 odbc_read_login_info(void)
 {
@@ -88,11 +75,9 @@ odbc_read_login_info(void)
 	FILE *in = NULL;
 	char line[512];
 	char *s1, *s2;
-	const char *const *search_p;
+#ifndef _WIN32
 	char path[1024];
 	int len;
-#ifdef _WIN32
-	UWORD old_config_mode;
 #endif
 
 	setbuf(stdout, NULL);
@@ -127,12 +112,9 @@ odbc_read_login_info(void)
 	}
 	fclose(in);
 
-	/* find our driver */
 #ifndef _WIN32
+	/* find our driver */
 	if (!getcwd(path, sizeof(path)))
-#else
-	if (!_getcwd(path, sizeof(path)))
-#endif
 		return 0;
 #ifdef __VMS
 	{
@@ -142,40 +124,23 @@ odbc_read_login_info(void)
 	}
 #endif
 	len = strlen(path);
-	if (len < 10 || (strcasecmp(path + len - 10, "/unittests") != 0
-#ifdef _WIN32
-	    && strcasecmp(path + len - 10, "\\unittests") != 0
-#endif
-	    ))
+	if (len < 10 || strcmp(path + len - 10, "/unittests") != 0)
 		return 0;
 	path[len - 9] = 0;
-	for (search_p = search_driver; *search_p; ++search_p) {
-		if (check_lib(path, *search_p))
-			break;
-	}
-	if (!*search_p)
+	/* TODO this must be extended with all possible systems... */
+	if (!check_lib(path, ".libs/libtdsodbc.so") && !check_lib(path, ".libs/libtdsodbc.sl")
+	    && !check_lib(path, ".libs/libtdsodbc.dll") && !check_lib(path, ".libs/libtdsodbc.dylib")
+	    && !check_lib(path, "_libs/libtdsodbc.exe"))
 		return 0;
 	strcpy(odbc_driver, path);
 
-#ifndef _WIN32
 	/* craft out odbc.ini, avoid to read wrong one */
-	sprintf(path, "odbc.ini.%d", (int) getpid());
-	in = fopen(path, "w");
+	in = fopen("odbc.ini", "w");
 	if (in) {
 		fprintf(in, "[%s]\nDriver = %s\nDatabase = %s\nServername = %s\n", odbc_server, odbc_driver, odbc_database, odbc_server);
 		fclose(in);
 		setenv("ODBCINI", "./odbc.ini", 1);
 		setenv("SYSODBCINI", "./odbc.ini", 1);
-		rename(path, "odbc.ini");
-		unlink(path);
-	}
-#else
-	if (SQLGetConfigMode(&old_config_mode)) {
-		SQLSetConfigMode(ODBC_USER_DSN);
-		SQLWritePrivateProfileString(odbc_server, "Driver", odbc_driver, "odbc.ini");
-		SQLWritePrivateProfileString(odbc_server, "Database", odbc_database, "odbc.ini");
-		SQLWritePrivateProfileString(odbc_server, "Servername", odbc_server, "odbc.ini");
-		SQLSetConfigMode(old_config_mode);
 	}
 #endif
 	return 0;
@@ -357,86 +322,6 @@ odbc_driver_is_freetds(void)
 	return freetds_driver;
 }
 
-/* Detect protocol version using queries
- * This to make possible protocol discovery on drivers like MS
- */
-static int
-odbc_tds_version_long(void)
-{
-	SQLRETURN ret;
-	SQLSMALLINT scale, nullable, type;
-	SQLULEN prec;
-	ODBC_BUF *odbc_buf = NULL;
-
-	/* statement must be in a consistent state to do the check */
-	CHKExecDirect(T("select 1"), SQL_NTS, "S");
-	odbc_reset_statement();
-
-	/* select cast(123 as sql_variant) -> nvarchar('123') is 7.0 failure query is 5.0 ?? */
-	ret = CHKExecDirect(T("select cast('123' as sql_variant)"), SQL_NTS, "SNoE");
-	odbc_reset_statement();
-	if (ret == SQL_ERROR) {
-		ODBC_FREE();
-		return 0x500;
-	}
-
-	/* see how bigint is returned, numeric means 7.0 */
-	CHKExecDirect(T("select cast('123' as bigint)"), SQL_NTS, "S");
-	CHKDescribeCol(1, NULL, 0, NULL, &type, &prec, &scale, &nullable, "S");
-	odbc_reset_statement();
-	if (type == SQL_NUMERIC || type == SQL_DECIMAL) {
-		ODBC_FREE();
-		return 0x700;
-	}
-	if (type != SQL_BIGINT) {
-		fprintf(stderr, "Strange type returned trying to detect protocol version\n");
-		odbc_disconnect();
-		ODBC_FREE();
-		exit(1);
-	}
-
-	/* select cast('123' as varchar(max)) -> ??? SQL_VARCHAR is 7.2 ?? */
-	ret = CHKExecDirect(T("select cast('123' as varchar(max))"), SQL_NTS, "SE");
-	if (ret == SQL_ERROR) {
-		odbc_reset_statement();
-		ODBC_FREE();
-		return 0x701;
-	}
-	CHKDescribeCol(1, NULL, 0, NULL, &type, &prec, &scale, &nullable, "S");
-	odbc_reset_statement();
-	if (type == SQL_LONGVARCHAR) {
-		ODBC_FREE();
-		return 0x701;
-	}
-	if (type != SQL_VARCHAR) {
-		fprintf(stderr, "Strange type returned trying to detect protocol version\n");
-		odbc_disconnect();
-		ODBC_FREE();
-		exit(1);
-	}
-
-	/* select cast('12:13:14.1234' as time(4)) -> NVARCHAR('12:13:14.1234') is 7.2 else 7.3 */
-	ret = CHKExecDirect(T("select cast('12:13:14.1234' as time(4))"), SQL_NTS, "SE");
-	if (ret == SQL_ERROR) {
-		odbc_reset_statement();
-		ODBC_FREE();
-		return 0x702;
-	}
-	CHKDescribeCol(1, NULL, 0, NULL, &type, &prec, &scale, &nullable, "S");
-	odbc_reset_statement();
-	if (scale == 4)
-		return 0x703;
-	if (scale != 0 || type != SQL_WVARCHAR) {
-		fprintf(stderr, "Strange type or scale returned trying to detect protocol version\n");
-		odbc_disconnect();
-		ODBC_FREE();
-		exit(1);
-	}
-
-	ODBC_FREE();
-	return 0x702;
-}
-
 int
 odbc_tds_version(void)
 {
@@ -446,18 +331,18 @@ odbc_tds_version(void)
 	SQLUINTEGER version;
 	SQLSMALLINT len;
 
-	if (odbc_driver_is_freetds() && tds_version < 0) {
+	if (!odbc_driver_is_freetds())
+		return 0;
+
+	if (tds_version < 0) {
 		version = 0;
 		len = 0;
 		SQLGetInfo(odbc_conn, 1300 /* SQL_INFO_FREETDS_TDS_VERSION */, &version, sizeof(version), &len);
 		if (len == sizeof(version))
 			tds_version = (version >> 16) << 8 | (version & 0xff);
 	}
-	if (tds_version < 0) {
-		tds_version = odbc_tds_version_long();
-	}
 	ODBC_FREE();
-	return tds_version;
+	return tds_version < 0 ? 0: tds_version;
 }
 
 static char db_str_version[32];
@@ -533,15 +418,6 @@ odbc_reset_statement_proc(SQLHSTMT *stmt, const char *file, int line)
 }
 
 void
-odbc_test_skipped(void)
-{
-	const char *p = getenv("TDS_SKIP_SUCCESS");
-	if (p && atoi(p) != 0)
-		exit(0);
-	exit(77);
-}
-
-void
 odbc_check_cursor(void)
 {
 	SQLRETURN retcode;
@@ -558,7 +434,7 @@ odbc_check_cursor(void)
 			printf("Your connection seems to not support cursors, probably you are using wrong protocol version or Sybase\n");
 			odbc_disconnect();
 			ODBC_FREE();
-			odbc_test_skipped();
+			exit(0);
 		}
 		ReportODBCError("SQLSetStmtAttr", SQL_HANDLE_STMT, odbc_stmt, retcode, __LINE__, __FILE__);
 	}
@@ -635,8 +511,8 @@ void
 odbc_read_error(void)
 {
 	ODBC_BUF *odbc_buf = NULL;
-	SQLTCHAR *err = (SQLTCHAR *) ODBC_GET(sizeof(odbc_err)*sizeof(SQLTCHAR));
-	SQLTCHAR *state = (SQLTCHAR *) ODBC_GET(sizeof(odbc_sqlstate)*sizeof(SQLTCHAR));
+	SQLTCHAR *err = ODBC_GET(sizeof(odbc_err)*sizeof(SQLTCHAR));
+	SQLTCHAR *state = ODBC_GET(sizeof(odbc_sqlstate)*sizeof(SQLTCHAR));
 
 	memset(odbc_err, 0, sizeof(odbc_err));
 	memset(odbc_sqlstate, 0, sizeof(odbc_sqlstate));
@@ -721,174 +597,37 @@ odbc_get_sqlchar(ODBC_BUF** buf, SQLWCHAR *s)
 
 	for (n=1; *p++ != 0; ++n)
 		continue;
-	out = (char *) odbc_buf_get(buf, n);
+	out = odbc_buf_get(buf, n);
 	odbc_from_sqlwchar(out, s, n);
 	return out;
 }
 
-typedef union {
-	struct sockaddr sa;
-	struct sockaddr_in sin;
-	char dummy[256];
-} long_sockaddr;
-
-static int
-fd_is_socket(int fd)
-{
-	long_sockaddr addr;
-	socklen_t addr_len;
-
 #ifndef _WIN32
-	struct stat file_stat;
-
-	if (fstat(fd, &file_stat))
-		return 0;
-	if ((file_stat.st_mode & S_IFSOCK) != S_IFSOCK)
-		return 0;
-#endif
-
-	addr_len = sizeof(addr);
-	if (tds_getpeername((TDS_SYS_SOCKET) fd, &addr.sa, &addr_len))
-		return 0;
-
-	addr_len = sizeof(addr);
-	if (tds_getsockname((TDS_SYS_SOCKET) fd, &addr.sa, &addr_len))
-		return 0;
-
-	return 1;
-}
-
-enum {NUM_FDS = 4096*4};
-static unsigned char fd_bitmask[NUM_FDS / 8];
-
-static int
-mark_fd(int fd)
-{
-	unsigned shift;
-	unsigned char mask;
-
-	if (fd < 0 || fd >= NUM_FDS)
-		return 0;
-
-	shift = fd & 7;
-	mask = fd_bitmask[fd >> 3];
-	fd_bitmask[fd >> 3] = mask | (1 << shift);
-
-	return (mask >> shift) & 1;
-}
-
-#ifdef _WIN32
-#define FOR_ALL_SOCKETS(i) for (i = 4; i <= (4096*4); i += 4)
-#else
-#define FOR_ALL_SOCKETS(i) for (i = 3; i < 1024; ++i)
-#endif
-
-void
-odbc_mark_sockets_opened(void)
-{
-	int i;
-
-	memset(fd_bitmask, 0, sizeof(fd_bitmask));
-	FOR_ALL_SOCKETS(i) {
-		if (fd_is_socket(i))
-			mark_fd(i);
-	}
-}
-
-TDS_SYS_SOCKET
+int
 odbc_find_last_socket(void)
 {
-	typedef struct {
-		TDS_SYS_SOCKET sock;
-		int local_port;
-		int remote_port;
-	} sock_info;
-	sock_info found[8];
-	unsigned num_found = 0, n;
-	int i;
+	int max_socket = -1, i;
 
-	FOR_ALL_SOCKETS(i) {
-		long_sockaddr remote_addr, local_addr;
-		struct sockaddr_in *in;
-		socklen_t remote_addr_len, local_addr_len;
-		sock_info *info;
+	for (i = 3; i < 1024; ++i) {
+		struct stat file_stat;
+		union {
+			struct sockaddr sa;
+			char data[256];
+		} u;
+		SOCKLEN_T addrlen;
 
-		/* check if is a socket */
-		if (!fd_is_socket(i))
+		if (fstat(i, &file_stat))
 			continue;
-		if (mark_fd(i))
+		if ((file_stat.st_mode & S_IFSOCK) != S_IFSOCK)
 			continue;
-
-		remote_addr_len = sizeof(remote_addr);
-		if (tds_getpeername((TDS_SYS_SOCKET) i, &remote_addr.sa, &remote_addr_len))
+		addrlen = sizeof(u);
+		if (tds_getsockname(i, &u.sa, &addrlen) < 0)
 			continue;
-		if (remote_addr.sa.sa_family != AF_INET
-#ifdef AF_INET6
-		    && remote_addr.sa.sa_family != AF_INET6
-#endif
-		    )
+		if (u.sa.sa_family != AF_INET && u.sa.sa_family != AF_INET6)
 			continue;
-		local_addr_len = sizeof(local_addr);
-		if (tds_getsockname((TDS_SYS_SOCKET) i, &local_addr.sa, &local_addr_len))
-			continue;
-
-		/* save in the array */
-		if (num_found >= 8) {
-			memmove(found, found+1, sizeof(found) - sizeof(found[0]));
-			num_found = 7;
-		}
-		info = &found[num_found++];
-		info->sock = (TDS_SYS_SOCKET) i;
-		info->local_port = -1;
-		info->remote_port = -1;
-
-		/* now check if is a socketpair */
-		in = &remote_addr.sin;
-		if (in->sin_family != AF_INET)
-			continue;
-		if (in->sin_addr.s_addr != htonl(INADDR_LOOPBACK))
-			continue;
-		info->remote_port = ntohs(in->sin_port);
-		in = &local_addr.sin;
-		if (in->sin_family != AF_INET)
-			continue;
-		if (in->sin_addr.s_addr != htonl(INADDR_LOOPBACK))
-			continue;
-		info->local_port = ntohs(in->sin_port);
-		for (n = 0; n < num_found - 1; ++n) {
-			if (found[n].remote_port != info->local_port
-			    || found[n].local_port != info->remote_port)
-				continue;
-			--num_found;
-			memmove(found+n, found+n+1, num_found-n-1);
-			--num_found;
-			break;
-		}
+		max_socket = i;
 	}
-
-	/* return last */
-	if (num_found == 0)
-		return INVALID_SOCKET;
-	return found[num_found-1].sock;
+	return max_socket;
 }
+#endif
 
-void
-odbc_check_no_row(const char *query)
-{
-	SQLRETURN rc;
-
-	rc = CHKExecDirect(T(query), SQL_NTS, "SINo");
-	if (rc == SQL_NO_DATA)
-		return;
-
-	do {
-		SQLSMALLINT cols;
-
-		CHKNumResultCols(&cols, "S");
-		if (cols != 0) {
-			fprintf(stderr, "Data not expected here, query:\n\t%s\n", query);
-			odbc_disconnect();
-			exit(1);
-		}
-	} while (CHKMoreResults("SNo") == SQL_SUCCESS);
-}

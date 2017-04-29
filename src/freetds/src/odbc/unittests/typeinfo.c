@@ -1,5 +1,8 @@
 #include "common.h"
 
+static char software_version[] = "$Id: typeinfo.c,v 1.17 2011-07-12 10:16:59 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
+
 static void
 TestName(int index, const char *expected_name)
 {
@@ -88,16 +91,12 @@ DoTest(int version3)
 	SQLLEN ind1, ind2, ind3, ind4, ind5, ind6;
 	int date_time_supported = 0;
 	int name_version3;
-	int tdsver;
 
 	odbc_use_version3 = version3;
 	name_version3 = version3;
-
 	odbc_connect();
 
 	printf("Using ODBC version %d\n", version3 ? 3 : 2);
-
-	tdsver = odbc_tds_version();
 
 	/* test column name */
 	/* MS ODBC use always ODBC 3 names even in ODBC 2 mode */
@@ -132,7 +131,7 @@ DoTest(int version3)
 	/* test for date/time support */
 	if (odbc_command_with_result(odbc_stmt, "select cast(getdate() as date)") == SQL_SUCCESS)
 		date_time_supported = 1;
-	if (odbc_db_is_microsoft() && tdsver < 0x703)
+	if (odbc_db_is_microsoft() && odbc_tds_version() < 0x703)
 		date_time_supported = 0;
 	SQLCloseCursor(odbc_stmt);
 
@@ -141,19 +140,23 @@ DoTest(int version3)
 	/* under Sybase this type require extra handling, check it */
 	CHECK_TYPE(SQL_VARCHAR, SQL_VARCHAR);
 
-	if (version3) {
-		/* MS ODBC returns S1004 (HY004), TODO support it */
-		CHECK_TYPE(SQL_TYPE_DATE, date_time_supported ? SQL_TYPE_DATE : SQL_UNKNOWN_TYPE);
+	CHECK_TYPE(SQL_DATE, date_time_supported && !version3 ? SQL_DATE : SQL_UNKNOWN_TYPE);
+	if (!odbc_db_is_microsoft())
+		CHECK_TYPE(SQL_TIME, date_time_supported && !version3 ? SQL_TIME : SQL_UNKNOWN_TYPE);
+	/* MS ODBC returns S1004 (HY004), TODO support it */
+	if (odbc_driver_is_freetds() || version3) {
+		CHECK_TYPE(SQL_TYPE_DATE, date_time_supported && version3 ? SQL_TYPE_DATE : SQL_UNKNOWN_TYPE);
 		if (!odbc_db_is_microsoft())
-			CHECK_TYPE(SQL_TYPE_TIME, date_time_supported ? SQL_TYPE_TIME : SQL_UNKNOWN_TYPE);
-		/* MS ODBC returns S1004 (HY004), TODO support it */
-		CHECK_TYPE(SQL_TYPE_TIMESTAMP, SQL_TYPE_TIMESTAMP);
-	} else {
-		CHECK_TYPE(SQL_DATE, date_time_supported ? SQL_DATE : SQL_UNKNOWN_TYPE);
-		if (!odbc_db_is_microsoft())
-			CHECK_TYPE(SQL_TIME, date_time_supported ? SQL_TIME : SQL_UNKNOWN_TYPE);
-		/* TODO MS ODBC handle SQL_TIMESTAMP even for ODBC 3 */
-		CHECK_TYPE(SQL_TIMESTAMP, SQL_TIMESTAMP);
+			CHECK_TYPE(SQL_TYPE_TIME, date_time_supported && version3 ? SQL_TYPE_TIME : SQL_UNKNOWN_TYPE);
+	}
+	/* TODO MS ODBC handle SQL_TIMESTAMP even for ODBC 3 */
+	if (odbc_driver_is_freetds())
+		CHECK_TYPE(SQL_TIMESTAMP, version3 ? SQL_UNKNOWN_TYPE : SQL_TIMESTAMP);
+	else
+		CHECK_TYPE(SQL_TIMESTAMP, version3 ? SQL_TYPE_TIMESTAMP : SQL_TIMESTAMP);
+	/* MS ODBC returns S1004 (HY004), TODO support it */
+	if (odbc_driver_is_freetds() || version3) {
+		CHECK_TYPE(SQL_TYPE_TIMESTAMP, version3 ? SQL_TYPE_TIMESTAMP : SQL_UNKNOWN_TYPE);
 	}
 
 	/* TODO implement this part of test */
@@ -180,13 +183,17 @@ DoTest(int version3)
 		if (odbc_db_is_microsoft())
 			CHKFetch("S");
 
+#ifdef TDS_NO_DM
 		/* mssql 2008 can return a lot of NVARCHAR as new type (ie DATE)
 		 * are converted automatically to NVARCHAR with former protocol
 		 */
-		if (!odbc_db_is_microsoft() || tdsver >= 0x703 || odbc_db_version_int() < 0x0a000000)
+		if (!odbc_db_is_microsoft() || odbc_tds_version() >= 0x703 || odbc_db_version_int() < 0x0a000000)
 			CHKFetch("No");
+		else
+			CHKMoreResults("No");
+#else
 		CHKMoreResults("No");
-
+#endif
 		CHKGetTypeInfo(SQL_BINARY, "SI");
 	}
 

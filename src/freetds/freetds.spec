@@ -1,11 +1,15 @@
 %define	name	freetds
-%define	version	1.00.6
+%define	version	0.95
 
 # compute some additional dependency from vendor name
 # 
 
-# SUSE
+# RedHat
+%define tds_builddep_redhat unixODBC-devel >= 2.0.0
 %define tds_dep_suse glibc-locale
+
+# SUSE
+%define tds_builddep_suse unixODBC-devel >= 2.0.0
 
 %undefine tds_builddep
 %{expand:%%{expand:%%{?tds_builddep_%{?_vendor}:%%%%define tds_builddep %%{?tds_builddep_%{?_vendor}}}}}
@@ -20,8 +24,8 @@ License: LGPL
 Group: System Environment/Libraries 
 Source: http://ibiblio.org/pub/Linux/ALPHA/freetds/stable/%{name}-%{version}.tar.bz2
 BuildRoot: %{_tmppath}/%{name}-buildroot
-BuildRequires: unixODBC-devel >= 2.0.0 gnutls-devel %{?tds_builddep}
-Requires: gnutls %{?tds_dep}
+%{?tds_builddep:BuildRequires: %{tds_builddep}}
+%{?tds_dep:Requires: %tds_dep}
 Summary: FreeTDS is a free re-implementation of the TDS (Tabular DataStream) protocol that is used by Sybase and Microsoft for their database products. 
  
 %description 
@@ -67,7 +71,7 @@ fi
 if test ! -r "$ODBCDIR/include/sql.h"; then
 	ODBCDIR=/usr
 fi
-%configure --with-tdsver=auto --with-unixodbc="$ODBCDIR" --with-gnutls
+%configure --with-tdsver=4.2 --with-unixodbc="$ODBCDIR"
 make RPM_OPT_FLAGS="$RPM_OPT_FLAGS"
  
 %install 
@@ -123,10 +127,6 @@ rm -rf $RPM_BUILD_ROOT
 %doc doc/userguide doc/images doc/reference
  
 %changelog
-* Fri Nov 13 2015 Frediano Ziglio <freddy77@gmail.com>
-- set default protocol version to "auto" (automatic)
-- enable gnutls in RPM packages
-
 * Wed Mar 28 2007 Frediano Ziglio <freddy77@gmail.com>
 - removed libtdssrv
 
@@ -141,13 +141,13 @@ rm -rf $RPM_BUILD_ROOT
 * Wed Feb  5 2003 Ian Grant <Ian.Grant@cl.cam.ac.uk>
 - 0.61 tweaked. Added libtdssrv libraries and tools in /usr/bin + man pages
 
-* Mon Dec 30 2002 David Hollis <dhollis@davehollis.com>
+* Sun Dec 30 2002 David Hollis <dhollis@davehollis.com>
 - 0.60 tweaked.  Move .a & .la files to -devel package
 
 * Thu Dec 20 2001 Brian Bruns <camber@ais.org> 
 - Modifications for 0.53 ver and removing interfaces file
 
-* Fri Jun 28 2001 Brian Bruns <camber@ais.org>
+* Wed Jun 28 2001 Brian Bruns <camber@ais.org> 
 - Modifications for 0.52 ver and ODBC drivers 
 
 * Wed Feb 14 2001 David Hollis <dhollis@emagisoft.com> 

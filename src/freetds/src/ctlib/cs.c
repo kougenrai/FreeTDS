@@ -40,8 +40,6 @@
 #include <freetds/convert.h>
 #include "replacements.h"
 
-#undef cs_dt_crack
-
 static CS_INT cs_diag_storemsg(CS_CONTEXT *context, CS_CLIENTMSG *message);
 static CS_INT cs_diag_clearmsg(CS_CONTEXT *context, CS_INT type);
 static CS_INT cs_diag_getmsg(CS_CONTEXT *context, CS_INT idx, CS_CLIENTMSG *message);
@@ -202,7 +200,7 @@ _cs_locale_alloc(void)
 {
 	tdsdump_log(TDS_DBG_FUNC, "_cs_locale_alloc()\n");
 
-	return tds_new0(CS_LOCALE, 1);
+	return (CS_LOCALE *) calloc(1, sizeof(CS_LOCALE));
 }
 
 static void
@@ -321,7 +319,7 @@ cs_ctx_alloc(CS_INT version, CS_CONTEXT ** ctx)
 
 	tdsdump_log(TDS_DBG_FUNC, "cs_ctx_alloc(%d, %p)\n", version, ctx);
 
-	*ctx = tds_new0(CS_CONTEXT, 1);
+	*ctx = (CS_CONTEXT *) calloc(1, sizeof(CS_CONTEXT));
 	tds_ctx = tds_alloc_context(*ctx);
 	if (!tds_ctx) {
 		free(*ctx);
@@ -465,8 +463,7 @@ cs_config(CS_CONTEXT * ctx, CS_INT action, CS_INT property, CS_VOID * buffer, CS
 CS_RETCODE
 cs_convert(CS_CONTEXT * ctx, CS_DATAFMT * srcfmt, CS_VOID * srcdata, CS_DATAFMT * destfmt, CS_VOID * destdata, CS_INT * resultlen)
 {
-	TDS_SERVER_TYPE src_type, desttype;
-	int src_len, destlen, len, i = 0;
+	int src_type, src_len, desttype, destlen, len, i = 0;
 	CONV_RESULT cres;
 	unsigned char *dest;
 	CS_RETCODE ret;
@@ -505,8 +502,6 @@ cs_convert(CS_CONTEXT * ctx, CS_DATAFMT * srcfmt, CS_VOID * srcdata, CS_DATAFMT 
 	}
 
 	src_type = _ct_get_server_type(NULL, srcfmt->datatype);
-	if (src_type == TDS_INVALID_TYPE)
-		return CS_FAIL;
 	src_len = srcfmt->maxlength;
 	if (srcfmt->datatype == CS_VARCHAR_TYPE || srcfmt->datatype == CS_VARBINARY_TYPE) {
 		CS_VARCHAR *vc = (CS_VARCHAR *) srcdata;
@@ -514,8 +509,6 @@ cs_convert(CS_CONTEXT * ctx, CS_DATAFMT * srcfmt, CS_VOID * srcdata, CS_DATAFMT 
 		srcdata = vc->str;
 	}
 	desttype = _ct_get_server_type(NULL, destfmt->datatype);
-	if (desttype == TDS_INVALID_TYPE)
-		return CS_FAIL;
 	destlen = destfmt->maxlength;
 	if (destfmt->datatype == CS_VARCHAR_TYPE || destfmt->datatype == CS_VARBINARY_TYPE) {
 		destvc = (CS_VARCHAR *) destdata;
@@ -636,10 +629,6 @@ cs_convert(CS_CONTEXT * ctx, CS_DATAFMT * srcfmt, CS_VOID * srcdata, CS_DATAFMT 
 		case SYBMONEY4:
 		case SYBDATETIME:
 		case SYBDATETIME4:
-		case SYBTIME:
-		case SYBDATE:
-		case SYB5BIGDATETIME:
-		case SYB5BIGTIME:
 			*resultlen = tds_get_size_by_type(src_type);
 			if (*resultlen > 0)
 				memcpy(dest, srcdata, *resultlen);
@@ -754,11 +743,7 @@ cs_convert(CS_CONTEXT * ctx, CS_DATAFMT * srcfmt, CS_VOID * srcdata, CS_DATAFMT 
 	case SYBMONEY4:
 	case SYBDATETIME:
 	case SYBDATETIME4:
-	case SYBTIME:
-	case SYBDATE:
 	case SYBUNIQUE:
-	case SYB5BIGDATETIME:
-	case SYB5BIGTIME:
 		*resultlen = tds_get_size_by_type(desttype);
 		memcpy(dest, &(cres.ti), *resultlen);
 		ret = CS_SUCCEED;
@@ -834,69 +819,35 @@ cs_convert(CS_CONTEXT * ctx, CS_DATAFMT * srcfmt, CS_VOID * srcdata, CS_DATAFMT 
 }
 
 CS_RETCODE
-cs_dt_crack_v2(CS_CONTEXT * ctx, CS_INT datetype, CS_VOID * dateval, CS_DATEREC * daterec)
+cs_dt_crack(CS_CONTEXT * ctx, CS_INT datetype, CS_VOID * dateval, CS_DATEREC * daterec)
 {
+	TDS_DATETIME *dt;
+	TDS_DATETIME4 *dt4;
 	TDSDATEREC dr;
-	TDS_INT tds_type;
-	bool extended = false;
 
-	tdsdump_log(TDS_DBG_FUNC, "cs_dt_crack_v2(%p, %d, %p, %p)\n", ctx, datetype, dateval, daterec);
+	tdsdump_log(TDS_DBG_FUNC, "cs_dt_crack(%p, %d, %p, %p)\n", ctx, datetype, dateval, daterec);
 
-	switch (datetype) {
-	case CS_DATETIME_TYPE:
-		tds_type = SYBDATETIME;
-		break;
-	case CS_DATETIME4_TYPE:
-		tds_type = SYBDATETIME4;
-		break;
-	case CS_DATE_TYPE:
-		tds_type = SYBDATE;
-		break;
-	case CS_TIME_TYPE:
-		tds_type = SYBTIME;
-		break;
-	case CS_BIGDATETIME_TYPE:
-		tds_type = SYB5BIGDATETIME;
-		extended = true;
-		break;
-	case CS_BIGTIME_TYPE:
-		tds_type = SYB5BIGTIME;
-		extended = true;
-		break;
-	default:
+	if (datetype == CS_DATETIME_TYPE) {
+		dt = (TDS_DATETIME *) dateval;
+		tds_datecrack(SYBDATETIME, dt, &dr);
+	} else if (datetype == CS_DATETIME4_TYPE) {
+		dt4 = (TDS_DATETIME4 *) dateval;
+		tds_datecrack(SYBDATETIME4, dt4, &dr);
+	} else {
 		return CS_FAIL;
 	}
-	tds_datecrack(tds_type, dateval, &dr);
-
-	/* Sybase CT-Library does not set these fields for CS_BIGTIME_TYPE */
-	if (tds_type != SYB5BIGTIME) {
-		daterec->dateyear = dr.year;
-		daterec->datemonth = dr.month;
-		daterec->datedmonth = dr.day;
-		daterec->datedyear = dr.dayofyear;
-		daterec->datedweek = dr.weekday;
-	}
+	daterec->dateyear = dr.year;
+	daterec->datemonth = dr.month;
+	daterec->datedmonth = dr.day;
+	daterec->datedyear = dr.dayofyear;
+	daterec->datedweek = dr.weekday;
 	daterec->datehour = dr.hour;
 	daterec->dateminute = dr.minute;
 	daterec->datesecond = dr.second;
 	daterec->datemsecond = dr.decimicrosecond / 10000u;
 	daterec->datetzone = 0;
-	if (extended) {
-		daterec->datesecfrac = dr.decimicrosecond / 10u;
-		daterec->datesecprec = 1000000;
-	}
 
 	return CS_SUCCEED;
-}
-
-CS_RETCODE
-cs_dt_crack(CS_CONTEXT * ctx, CS_INT datetype, CS_VOID * dateval, CS_DATEREC * daterec)
-{
-	tdsdump_log(TDS_DBG_FUNC, "cs_dt_crack(%p, %d, %p, %p)\n", ctx, datetype, dateval, daterec);
-
-	if (datetype != CS_BIGDATETIME_TYPE && datetype != CS_BIGTIME_TYPE)
-		return cs_dt_crack_v2(ctx, datetype, dateval, daterec);
-	return CS_FAIL;
 }
 
 CS_RETCODE
@@ -948,10 +899,12 @@ cs_locale(CS_CONTEXT * ctx, CS_INT action, CS_LOCALE * locale, CS_INT type, CS_V
 			}
 			
 			free(locale->charset);
-			locale->charset = tds_strndup(buffer, buflen);
+			locale->charset = (char *)malloc(buflen + 1);
 			if (!locale->charset)
 				break;
 
+			strncpy(locale->charset, (char *)buffer, buflen);
+			locale->charset[buflen] = '\0';
 			code = CS_SUCCEED;
 			break;
 
@@ -961,10 +914,12 @@ cs_locale(CS_CONTEXT * ctx, CS_INT action, CS_LOCALE * locale, CS_INT type, CS_V
 			}
 			
 			free(locale->language);
-			locale->language = tds_strndup(buffer, buflen);
+			locale->language = (char *)malloc(buflen + 1);
 			if (!locale->language)
 				break;
 
+			strncpy(locale->language, (char *)buffer, buflen);
+			locale->language[buflen] = '\0';
 			code = CS_SUCCEED;
 			break;
 
@@ -989,15 +944,21 @@ cs_locale(CS_CONTEXT * ctx, CS_INT action, CS_LOCALE * locale, CS_INT type, CS_V
 			}
 			if (i) {
 				free(locale->language);
-				locale->language = tds_strndup(b, i);
+				locale->language = (char *)malloc(i + 1);
 				if (!locale->language)
 					break;
+
+				strncpy(locale->language, b, i);
+				locale->language[i] = '\0';
 			}
 			if (i != (buflen - 1)) {
 				free(locale->charset);
-				locale->charset = tds_strndup(b + i + 1, buflen - i - 1);
+				locale->charset = (char *)malloc(buflen - i);
 				if (!locale->charset)
 					break;
+				
+				strncpy(locale->charset, b + i + 1, buflen - i - 1);
+				locale->charset[buflen - i - 1] = '\0';
 			}
 			code = CS_SUCCEED;
 			break;
@@ -1010,10 +971,12 @@ cs_locale(CS_CONTEXT * ctx, CS_INT action, CS_LOCALE * locale, CS_INT type, CS_V
 			}
 			
 			free(locale->collate);
-			locale->collate = tds_strndup(buffer, buflen);
+			locale->collate = (char *)malloc(buflen + 1);
 			if (!locale->collate)
 				break;
 
+			strncpy(locale->collate, (char *)buffer, buflen);
+			locale->collate[buflen] = '\0';
 			code = CS_SUCCEED;
 			break;
 		*/
@@ -1320,12 +1283,12 @@ cs_diag_storemsg(CS_CONTEXT *context, CS_CLIENTMSG *message)
 		return CS_FAIL;
 	}
 
-	*curptr = tds_new(struct cs_diag_msg, 1);
+	*curptr = (struct cs_diag_msg *) malloc(sizeof(struct cs_diag_msg));
 	if (*curptr == NULL) { 
 		return CS_FAIL;
 	} else {
 		(*curptr)->next = NULL;
-		(*curptr)->msg  = tds_new(CS_CLIENTMSG, 1);
+		(*curptr)->msg  = (CS_CLIENTMSG*) malloc(sizeof(CS_CLIENTMSG));
 		if ((*curptr)->msg == NULL) {
 			return CS_FAIL;
 		} else {

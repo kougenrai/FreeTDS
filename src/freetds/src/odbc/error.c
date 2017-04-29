@@ -39,6 +39,8 @@
 #include "replacements.h"
 #include "sqlwparams.h"
 
+TDS_RCSID(var, "$Id: error.c,v 1.70 2012-03-09 21:51:21 freddy77 Exp $");
+
 static void odbc_errs_pop(struct _sql_errors *errs);
 static const char *odbc_get_msg(const char *sqlstate);
 static void odbc_get_v2state(const char *sqlstate, char *dest_state);
@@ -330,13 +332,13 @@ odbc_get_v2state(const char *sqlstate, char *dest_state)
 
 	while (pmap->v3[0]) {
 		if (!strcasecmp(pmap->v3, sqlstate)) {
-			strlcpy(dest_state, pmap->v2, 6);
+			tds_strlcpy(dest_state, pmap->v2, 6);
 			return;
 		}
 		++pmap;
 	}
 	/* return the original if a v2 state is not found */
-	strlcpy(dest_state, sqlstate, 6);
+	tds_strlcpy(dest_state, sqlstate, 6);
 }
 
 void
@@ -388,14 +390,12 @@ odbc_errs_add(struct _sql_errors *errs, const char *sqlstate, const char *msg)
 		return;
 
 	n = errs->num_errors;
-	if (!TDS_RESIZE(errs->errs, n + 1)) {
-		errs->lastrc = SQL_ERROR;
+	if (!TDS_RESIZE(errs->errs, n + 1))
 		return;
-	}
 
 	memset(&errs->errs[n], 0, sizeof(struct _sql_error));
 	errs->errs[n].native = 0;
-	strlcpy(errs->errs[n].state3, sqlstate, 6);
+	tds_strlcpy(errs->errs[n].state3, sqlstate, 6);
 	odbc_get_v2state(errs->errs[n].state3, errs->errs[n].state2);
 
 	/* TODO why driver ?? -- freddy77 */
@@ -419,16 +419,22 @@ void
 odbc_errs_add_rdbms(struct _sql_errors *errs, TDS_UINT native, const char *sqlstate, const char *msg, int linenum, int msgstate,
 		    const char *server, int row)
 {
+	struct _sql_error *p;
 	int n = errs->num_errors;
 
-	if (!TDS_RESIZE(errs->errs, n + 1))
+	if (errs->errs)
+		p = (struct _sql_error *) realloc(errs->errs, sizeof(struct _sql_error) * (n + 1));
+	else
+		p = (struct _sql_error *) malloc(sizeof(struct _sql_error));
+	if (!p)
 		return;
+	errs->errs = p;
 
 	memset(&errs->errs[n], 0, sizeof(struct _sql_error));
 	errs->errs[n].row = row;
 	errs->errs[n].native = native;
 	if (sqlstate)
-		strlcpy(errs->errs[n].state2, sqlstate, 6);
+		tds_strlcpy(errs->errs[n].state2, sqlstate, 6);
 	else
 		errs->errs[n].state2[0] = '\0';
 	strcpy(errs->errs[n].state3, errs->errs[n].state2);
@@ -719,8 +725,8 @@ ODBC_FUNC(SQLGetDiagField, (P(SQLSMALLINT,handleType), P(SQLHANDLE,handle), P(SQ
 		break;
 
 	case SQL_DIAG_CONNECTION_NAME:
-		if (dbc && dbc->tds_socket && dbc->tds_socket->conn->spid > 0)
-			cplen = sprintf(tmp, "%d", dbc->tds_socket->conn->spid);
+		if (dbc && dbc->tds_socket && dbc->tds_socket->spid > 0)
+			cplen = sprintf(tmp, "%d", dbc->tds_socket->spid);
 		else
 			cplen = 0;
 
@@ -737,27 +743,27 @@ ODBC_FUNC(SQLGetDiagField, (P(SQLSMALLINT,handleType), P(SQLHANDLE,handle), P(SQ
 		break;
 
 	case SQL_DIAG_SERVER_NAME:
-		msg = NULL;
+		msg = "";
 		switch (handleType) {
 		case SQL_HANDLE_ENV:
 			break;
 		case SQL_HANDLE_DBC:
-			if (dbc->tds_socket)
-				msg = dbc->tds_socket->conn->server;
+			msg = tds_dstr_cstr(&dbc->server);
 			break;
 		case SQL_HANDLE_STMT:
-			if (stmt->dbc->tds_socket)
-				msg = stmt->dbc->tds_socket->conn->server;
+			msg = tds_dstr_cstr(&stmt->dbc->server);
 			/*
 			 * if dbc->server is not initialized, init it
 			 * from the errs structure
 			 */
-			if (!msg && errs->errs[numRecord].server) {
+			if (!msg[0] && errs->errs[numRecord].server) {
+				if (!tds_dstr_copy(&stmt->dbc->server, errs->errs[numRecord].server))
+					return SQL_ERROR;
 				msg = errs->errs[numRecord].server;
 			}
 			break;
 		}
-		result = odbc_set_string_oct(dbc, buffer, cbBuffer, pcbBuffer, msg ? msg : "", -1);
+		result = odbc_set_string_oct(dbc, buffer, cbBuffer, pcbBuffer, msg, -1);
 		break;
 
 	case SQL_DIAG_SQLSTATE:

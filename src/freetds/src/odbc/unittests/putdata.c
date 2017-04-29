@@ -2,10 +2,34 @@
 
 /* Test for SQLPutData */
 
+static char software_version[] = "$Id: putdata.c,v 1.19 2011-07-12 10:16:59 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
+
 static const char test_text[] =
 	"Nel mezzo del cammin di nostra vita\n" "mi ritrovai per una selva oscura\n" "che' la diritta via era smarrita.";
 
 #define BYTE_AT(n) (((n) * 245 + 123) & 0xff)
+
+static void
+CheckNoRow(const char *query)
+{
+	SQLRETURN rc;
+
+	rc = CHKExecDirect(T(query), SQL_NTS, "SINo");
+	if (rc == SQL_NO_DATA)
+		return;
+
+	do {
+		SQLSMALLINT cols;
+
+		CHKNumResultCols(&cols, "S");
+		if (cols != 0) {
+			fprintf(stderr, "Data not expected here, query:\n\t%s\n", query);
+			odbc_disconnect();
+			exit(1);
+		}
+	} while (CHKMoreResults("SNo") == SQL_SUCCESS);
+}
 
 static int
 to_sqlwchar(SQLWCHAR *dst, const char *src, int n)
@@ -144,7 +168,7 @@ main(int argc, char *argv[])
 			*pp++ = *p;
 	} while(*p++);
 	strcat(sql, "') SELECT 1");
-	odbc_check_no_row(sql);
+	CheckNoRow(sql);
 
 	odbc_command("DELETE FROM #putdata");
 
@@ -176,7 +200,7 @@ main(int argc, char *argv[])
 	}
 
 	/* check inserts ... */
-	odbc_check_no_row("IF EXISTS(SELECT * FROM #putdata WHERE c NOT LIKE 'abc') SELECT 1");
+	CheckNoRow("IF EXISTS(SELECT * FROM #putdata WHERE c NOT LIKE 'abc') SELECT 1");
 
 	odbc_command("DELETE FROM #putdata");
 
@@ -203,7 +227,7 @@ main(int argc, char *argv[])
 		}
 
 		/* check inserts ... */
-		odbc_check_no_row("IF EXISTS(SELECT * FROM #putdata WHERE c NOT LIKE '') SELECT 1");
+		CheckNoRow("IF EXISTS(SELECT * FROM #putdata WHERE c NOT LIKE '') SELECT 1");
 	}
 
 	/* TODO test cancel inside SQLExecute */

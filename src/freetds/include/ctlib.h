@@ -37,6 +37,9 @@ extern "C"
 #endif
 #endif
 
+static const char rcsid_ctlib_h[] = "$Id: ctlib.h,v 1.31 2011-06-18 17:52:24 freddy77 Exp $";
+static const void *const no_unused_ctlib_h_warn[] = { rcsid_ctlib_h, no_unused_ctlib_h_warn };
+
 /*
  * internal types
  */
@@ -108,6 +111,8 @@ typedef struct _ct_colinfo
 }
 CT_COLINFO;
 
+typedef struct _cs_command_list CS_COMMAND_LIST;
+typedef struct _cs_dynamic CS_DYNAMIC_LIST;
 typedef struct _cs_dynamic CS_DYNAMIC;
 
 struct _cs_connection
@@ -120,8 +125,8 @@ struct _cs_connection
 	void *userdata;
 	int userdata_len;
 	CS_LOCALE *locale;
-	CS_COMMAND *cmds;
-	CS_DYNAMIC *dynlist;
+	CS_COMMAND_LIST *cmds;
+	CS_DYNAMIC_LIST *dynlist;
 	char *server_addr;
 };
 
@@ -206,7 +211,6 @@ struct _cs_dynamic
 
 struct _cs_command
 {
-	struct _cs_command *next;
 	CS_INT command_state;
 	CS_INT results_state;
 	CS_INT cancel_state;
@@ -231,8 +235,15 @@ struct _cs_command
 	int userdata_len;
 };
 
+struct _cs_command_list
+{
+	struct _cs_command *cmd;
+	struct _cs_command_list *next;
+};
+
 struct _cs_blkdesc
 {
+	CS_CONNECTION *con;
 	TDSBCPINFO bcpinfo;
 };
 
@@ -259,7 +270,7 @@ struct _cs_locale
  */
 TDSRET _ct_handle_server_message(const TDSCONTEXT * ctxptr, TDSSOCKET * tdsptr, TDSMESSAGE * msgptr);
 int _ct_handle_client_message(const TDSCONTEXT * ctxptr, TDSSOCKET * tdsptr, TDSMESSAGE * msgptr);
-TDS_SERVER_TYPE _ct_get_server_type(TDSSOCKET *tds, int datatype);
+int _ct_get_server_type(TDSSOCKET *tds, int datatype);
 int _ct_bind_data(CS_CONTEXT *ctx, TDSRESULTINFO * resinfo, TDSRESULTINFO *bindinfo, CS_INT offset);
 int _ct_get_client_type(TDSCOLUMN *col);
 void _ctclient_msg(CS_CONNECTION * con, const char *funcname, int layer, int origin, int severity, int number,

@@ -20,11 +20,16 @@
 #ifndef _replacements_h_
 #define _replacements_h_
 
+/* $Id: replacements.h,v 1.31 2011-09-01 07:52:44 freddy77 Exp $ */
+
 #include <stdarg.h>
 #include "tds_sysdep_public.h"
-#include <freetds/sysdep_private.h>
 
-#include <replacements/readpassphrase.h>
+#ifndef HAVE_READPASSPHRASE
+# include <replacements/readpassphrase.h>
+#else
+# include <readpassphrase.h>
+#endif
 
 /* these headers are needed for basename */
 #ifdef HAVE_STRING_H
@@ -33,12 +38,10 @@
 #ifdef HAVE_LIBGEN_H
 # include <libgen.h>
 #endif
-#ifdef HAVE_GETOPT_H
-# include <getopt.h>
-#endif
 
 #if !HAVE_POLL
-#include <replacements/poll.h>
+#include <fakepoll.h>
+#define poll(fds, nfds, timeout) fakepoll((fds), (nfds), (timeout))
 #endif /* !HAVE_POLL */
 
 #include <freetds/pushvis.h>
@@ -48,38 +51,46 @@ extern "C"
 {
 #endif
 
+#if !HAVE_VSNPRINTF
+#if  HAVE__VSNPRINTF
+#undef vsnprintf
+#define vsnprintf _vsnprintf
+#else
+int vsnprintf(char *ret, size_t max, const char *fmt, va_list ap);
+#endif /* !HAVE__VSNPRINTF */
+#endif /*  HAVE_VSNPRINTF */
+
 #if !HAVE_ASPRINTF
-#undef asprintf
-int tds_asprintf(char **ret, const char *fmt, ...);
-#define asprintf tds_asprintf
+int asprintf(char **ret, const char *fmt, ...);
 #endif /* !HAVE_ASPRINTF */
 
 #if !HAVE_VASPRINTF
-#undef vasprintf
-int tds_vasprintf(char **ret, const char *fmt, va_list ap);
-#define vasprintf tds_vasprintf
+int vasprintf(char **ret, const char *fmt, va_list ap);
 #endif /* !HAVE_VASPRINTF */
 
 #if !HAVE_STRTOK_R
 /* Some MingW define strtok_r macro thread-safe but not reentrant but we
    need both so avoid using the macro */
 #undef strtok_r
-char *tds_strtok_r(char *str, const char *sep, char **lasts);
-#define strtok_r tds_strtok_r
+char *strtok_r(char *str, const char *sep, char **lasts);
 #endif /* !HAVE_STRTOK_R */
 
 #if !HAVE_STRSEP
-#undef strsep
-char *tds_strsep(char **stringp, const char *delim);
-#define strsep tds_strsep
+char *strsep(char **stringp, const char *delim);
 #endif /* !HAVE_STRSEP */
 
-#if !HAVE_STRLCPY
+#if HAVE_STRLCPY
+#define tds_strlcpy(d,s,l) strlcpy(d,s,l)
+#else
 size_t tds_strlcpy(char *dest, const char *src, size_t len);
-#define strlcpy(d,s,l) tds_strlcpy(d,s,l)
 #endif
 
-#if !HAVE_GETADDRINFO
+#if HAVE_GETADDRINFO
+#define tds_addrinfo addrinfo
+#define tds_getaddrinfo getaddrinfo
+#define tds_getnameinfo getnameinfo
+#define tds_freeaddrinfo freeaddrinfo
+#else
 typedef struct tds_addrinfo {
 	int ai_flags;
 	int ai_family;
@@ -94,25 +105,25 @@ typedef struct tds_addrinfo {
 int tds_getaddrinfo(const char *node, const char *service, const struct tds_addrinfo *hints, struct tds_addrinfo **res);
 int tds_getnameinfo(const struct sockaddr *sa, size_t salen, char *host, size_t hostlen, char *serv, size_t servlen, int flags);
 void tds_freeaddrinfo(struct tds_addrinfo *addr);
-#define addrinfo tds_addrinfo
-#define getaddrinfo(n,s,h,r) tds_getaddrinfo(n,s,h,r)
-#define getnameinfo(a,b,c,d,e,f,g) tds_getnameinfo(a,b,c,d,e,f,g)
-#define freeaddrinfo(a) tds_freeaddrinfo(a)
 #endif
 
 #ifndef AI_FQDN
 #define AI_FQDN 0
 #endif
 
-#if !HAVE_STRLCAT
+#if HAVE_STRLCAT
+#define tds_strlcat(d,s,l) strlcat(d,s,l)
+#else
 size_t tds_strlcat(char *dest, const char *src, size_t len);
-#define strlcat(d,s,l) tds_strlcat(d,s,l)
 #endif
 
-#if !HAVE_BASENAME
+#if HAVE_BASENAME
+#define tds_basename(s) basename(s)
+#else
 char *tds_basename(char *path);
-#define basename(path) tds_basename(path)
 #endif
+
+char *getpassarg(char *arg);
 
 /* 
  * Microsoft's C Runtime library is missing strcasecmp and strncasecmp. 
@@ -134,41 +145,18 @@ char *tds_basename(char *path);
 # if !defined(strncasecmp) && defined(_MSC_VER)
 #     define  strncasecmp(x,y,z) strnicmp((x),(y),(z))
 # endif
-
-#undef gettimeofday
-int tds_gettimeofday (struct timeval *tv, void *tz);
-#define gettimeofday tds_gettimeofday
-
-/* Older Mingw-w64 versions don't define these flags. */
-#if defined(__MINGW32__) && !defined(AI_ADDRCONFIG)
-#  define AI_ADDRCONFIG 0x00000400
-#endif
-#if defined(__MINGW32__) && !defined(AI_V4MAPPED)
-#  define AI_V4MAPPED 0x00000800
-#endif
-
-#endif
-
-#if !HAVE_GETOPT
-#undef getopt
-int tds_getopt(int argc, char * const argv[], const char *optstring);
-#define getopt tds_getopt
-
+int gettimeofday (struct timeval *tv, void *tz);
+int getopt(int argc, char * const argv[], const char *optstring);
 extern char *optarg;
 extern int optind, offset, opterr, optreset;
 #endif
 
-#if !HAVE_SOCKETPAIR
-int tds_socketpair(int domain, int type, int protocol, TDS_SYS_SOCKET sv[2]);
-#define socketpair(d,t,p,s) tds_socketpair(d,t,p,s)
+#if HAVE_SOCKETPAIR
+#define tds_socketpair(d,t,p,s) socketpair(d,t,p,s)
+#else
+int tds_socketpair(int domain, int type, int protocol, int sv[2]);
 #endif
 
-#if !HAVE_DAEMON
-int tds_daemon(int no_chdir, int no_close);
-#define daemon(d,c) tds_daemon(d,c)
-#endif
-
-char *tds_getpassarg(char *arg);
 void tds_sleep_s(unsigned sec);
 void tds_sleep_ms(unsigned ms);
 

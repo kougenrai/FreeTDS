@@ -1,5 +1,5 @@
 /*
- * This file produced from ./encodings.pl on Sun Jun 19 09:01:10 2016
+ * This file produced from ./encodings.pl on Mon Jun  8 18:03:34 2015
  * $Id: encodings.pl,v 1.12 2010-11-26 19:46:55 freddy77 Exp $
  */
 #ifdef TDS_ICONV_ENCODING_TABLES
@@ -108,6 +108,7 @@ static const TDS_ENCODING canonic_charsets[] = {
 	{          "UTF-32LE",	4, 4, 100},	/* 100 */
 	{             "UTF-7",	1, 4, 101},	/* 101 */
 	{            "VISCII",	1, 1, 102},	/* 102 */
+	{"",	0, 0, 0}
 };
 
 static const CHARACTER_SET_ALIAS iconv_aliases[] = {

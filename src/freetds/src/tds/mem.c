@@ -31,7 +31,7 @@
 #include <freetds/tds.h>
 #include <freetds/iconv.h>
 #include <freetds/tls.h>
-#include <freetds/checks.h>
+#include "tds_checks.h"
 #include <freetds/string.h>
 #include "replacements.h"
 #include <freetds/enum_cap.h>
@@ -40,7 +40,7 @@
 #include <sys/socket.h>
 #endif
 
-#ifdef HAVE_STRING_H
+#ifdef STRING_H
 #include <string.h>
 #endif
 
@@ -51,6 +51,8 @@
 #ifdef HAVE_LANGINFO_H
 #include <langinfo.h>
 #endif /* HAVE_LANGINFO_H */
+
+TDS_RCSID(var, "$Id: mem.c,v 1.225 2012-03-11 15:52:22 freddy77 Exp $");
 
 static void tds_free_env(TDSCONNECTION * conn);
 static void tds_free_compute_results(TDSSOCKET * tds);
@@ -181,7 +183,7 @@ tds_alloc_dynamic(TDSCONNECTION * conn, const char *id)
 	dyn->next = conn->dyns;
 	conn->dyns = dyn;
 
-	strlcpy(dyn->id, id, TDS_MAX_DYNID_LEN);
+	tds_strlcpy(dyn->id, id, TDS_MAX_DYNID_LEN);
 
 	return dyn;
 
@@ -286,7 +288,9 @@ tds_alloc_param_result(TDSPARAMINFO * old_param)
 
 	param_info = old_param;
 	if (!param_info) {
-		TEST_MALLOC(param_info, TDSPARAMINFO);
+		param_info = (TDSPARAMINFO *) calloc(1, sizeof(TDSPARAMINFO));
+		if (!param_info)
+			goto Cleanup;
 		param_info->ref_count = 1;
 	}
 
@@ -318,7 +322,7 @@ tds_free_param_result(TDSPARAMINFO * param_info)
 	if (col->column_data && col->column_data_free)
 		col->column_data_free(col);
 
-	if (param_info->num_cols == 0)
+	if (param_info->num_cols == 0 && param_info->columns)
 		TDS_ZERO_FREE(param_info->columns);
 
 	/*
@@ -392,13 +396,17 @@ tds_alloc_compute_result(TDS_USMALLINT num_cols, TDS_USMALLINT by_cols)
 
 	TEST_CALLOC(info->columns, TDSCOLUMN *, num_cols);
 
+	tdsdump_log(TDS_DBG_INFO1, "alloc_compute_result. point 1\n");
 	info->num_cols = num_cols;
 	for (col = 0; col < num_cols; col++)
 		if (!(info->columns[col] = tds_alloc_column()))
 			goto Cleanup;
 
+	tdsdump_log(TDS_DBG_INFO1, "alloc_compute_result. point 2\n");
+
 	if (by_cols) {
 		TEST_CALLOC(info->bycolumns, TDS_SMALLINT, by_cols);
+		tdsdump_log(TDS_DBG_INFO1, "alloc_compute_result. point 3\n");
 		info->by_cols = by_cols;
 	}
 
@@ -415,15 +423,15 @@ tds_alloc_compute_results(TDSSOCKET * tds, TDS_USMALLINT num_cols, TDS_USMALLINT
 	TDSCOMPUTEINFO **comp_info;
 	TDSCOMPUTEINFO *cur_comp_info;
 
-	tdsdump_log(TDS_DBG_FUNC, "alloc_compute_result. num_cols = %d bycols = %d\n", num_cols, by_cols);
-	tdsdump_log(TDS_DBG_FUNC, "alloc_compute_result. num_comp_info = %d\n", tds->num_comp_info);
+	tdsdump_log(TDS_DBG_INFO1, "alloc_compute_result. num_cols = %d bycols = %d\n", num_cols, by_cols);
+	tdsdump_log(TDS_DBG_INFO1, "alloc_compute_result. num_comp_info = %d\n", tds->num_comp_info);
 
 	cur_comp_info = tds_alloc_compute_result(num_cols, by_cols);
 	if (!cur_comp_info)
 		return NULL;
 
 	n = tds->num_comp_info;
-	comp_info = (TDSCOMPUTEINFO **) TDS_RESIZE(tds->comp_info, n + 1u);
+	comp_info = TDS_RESIZE(tds->comp_info, n + 1u);
 	if (!comp_info) {
 		tds_free_compute_result(cur_comp_info);
 		return NULL;
@@ -433,7 +441,7 @@ tds_alloc_compute_results(TDSSOCKET * tds, TDS_USMALLINT num_cols, TDS_USMALLINT
 	comp_info[n] = cur_comp_info;
 	tds->num_comp_info = n + 1u;
 
-	tdsdump_log(TDS_DBG_FUNC, "alloc_compute_result. num_comp_info = %d\n", tds->num_comp_info);
+	tdsdump_log(TDS_DBG_INFO1, "alloc_compute_result. num_comp_info = %d\n", tds->num_comp_info);
 
 	return comp_info;
 }
@@ -446,8 +454,7 @@ tds_alloc_results(TDS_USMALLINT num_cols)
 
 	TEST_MALLOC(res_info, TDSRESULTINFO);
 	res_info->ref_count = 1;
-	if (num_cols)
-		TEST_CALLOC(res_info->columns, TDSCOLUMN *, num_cols);
+	TEST_CALLOC(res_info->columns, TDSCOLUMN *, num_cols);
 	for (col = 0; col < num_cols; col++)
 		if (!(res_info->columns[col] = tds_alloc_column()))
 			goto Cleanup;
@@ -463,16 +470,11 @@ void
 tds_set_current_results(TDSSOCKET *tds, TDSRESULTINFO *info)
 {
 	tds_detach_results(info);
-	if (tds->current_results)
-		tds->current_results->attached_to = NULL;
 	if (info)
 		info->attached_to = tds;
 	tds->current_results = info;
 }
 
-/**
- * Detach result info from it current socket
- */
 void
 tds_detach_results(TDSRESULTINFO *info)
 {
@@ -529,7 +531,7 @@ tds_alloc_row(TDSRESULTINFO * res_info)
 	}
 	res_info->row_size = row_size;
 
-	ptr = tds_new0(unsigned char, res_info->row_size);
+	ptr = (unsigned char *) calloc(1, res_info->row_size);
 	res_info->current_row = ptr;
 	if (!ptr)
 		return TDS_FAIL;
@@ -609,8 +611,6 @@ tds_free_results(TDSRESULTINFO * res_info)
 	if (--res_info->ref_count != 0)
 		return;
 
-	tds_detach_results(res_info);
-
 	if (res_info->num_cols && res_info->columns) {
 		for (i = 0; i < res_info->num_cols; i++)
 			if ((curcol = res_info->columns[i]) != NULL) {
@@ -651,10 +651,7 @@ tds_free_all_results(TDSSOCKET * tds)
 	tds_free_compute_results(tds);
 	tds->has_status = 0;
 	tds->ret_status = 0;
-	if (tds->cur_dyn)
-		tds_detach_results(tds->cur_dyn->res_info);
 }
-
 /*
  * Return 1 if winsock is initialized, else 0.
  */
@@ -662,31 +659,22 @@ static int
 winsock_initialized(void)
 {
 #if defined(_WIN32) || defined(_WIN64)
-	static bool initialized = false;
-	static tds_mutex mtx = TDS_MUTEX_INITIALIZER;
-
 	WSADATA wsa_data;
 	int erc;
-
-	if (initialized)
+	WSAPROTOCOL_INFO protocols[64];
+	DWORD how_much = sizeof(protocols);
+	WORD requested_version = MAKEWORD(2, 2);
+	 
+	if (SOCKET_ERROR != WSAEnumProtocols(NULL, protocols, &how_much)) 
 		return 1;
 
-	tds_mutex_lock(&mtx);
-	/* same check inside the mutex */
-	if (initialized) {
-		tds_mutex_unlock(&mtx);
-		return 1;
+	if (WSANOTINITIALISED != (erc = WSAGetLastError())) {
+		fprintf(stderr, "tds_init_winsock: WSAEnumProtocols failed with %d (%s)\n", erc, sock_strerror(erc) );
+		return 0;
 	}
-
-	/* initialize the socket layer */
-	erc = WSAStartup(MAKEWORD(2, 2), &wsa_data);
-	initialized = (erc == 0);
-	tds_mutex_unlock(&mtx);
-
-	if (erc != 0) {
-		char *errstr = sock_strerror(erc);
-		tdsdump_log(TDS_DBG_ERROR, "tds_init_winsock: WSAStartup failed with %d (%s)\n", erc, errstr);
-		sock_strerror_free(errstr);
+	
+	if (SOCKET_ERROR == (erc = WSAStartup(requested_version, &wsa_data))) {
+		fprintf(stderr, "tds_init_winsock: WSAStartup failed with %d (%s)\n", erc, sock_strerror(erc) );
 		return 0;
 	}
 #endif
@@ -705,7 +693,7 @@ tds_alloc_context(void * parent)
 	if ((locale = tds_get_locale()) == NULL)
 		return NULL;
 
-	if ((context = tds_new0(TDSCONTEXT, 1)) == NULL) {
+	if ((context = (TDSCONTEXT*) calloc(1, sizeof(TDSCONTEXT))) == NULL) {
 		tds_free_locale(locale);
 		return NULL;
 	}
@@ -754,8 +742,7 @@ tds_alloc_locale(void)
 	REQ(i,CSR_MULTI) REQ(i,CON_INBAND) REQ(i,PROTO_TEXT) REQ(i,PROTO_BULK) \
 	REQ(i,DATA_SENSITIVITY) REQ(i,DATA_BOUNDARY) REQ(i,PROTO_DYNPROC) REQ(i,DATA_FLTN) \
 	REQ(i,DATA_BITN) REQ(i,DATA_INT8) REQ(i,WIDETABLE) \
-	REQ(i,DATA_UINT2) REQ(i,DATA_UINT4) REQ(i,DATA_UINT8) REQ(i,DATA_UINTN) REQ(i,LARGEIDENT) \
-	REQ(i,SRVPKTSIZE) REQ(i,DATA_DATE) REQ(i,DATA_TIME) REQ(i,DATA_BIGTIME) REQ(i,DATA_BIGDATETIME)
+	REQ(i,DATA_UINT2) REQ(i,DATA_UINT4) REQ(i,DATA_UINT8) REQ(i,DATA_UINTN) REQ(i,LARGEIDENT)
 #define REQ(i,n) |(((TDS_REQ_ ## n / 8) == i)?(1<<(TDS_REQ_ ## n & 7)):0)
 #define REQB(i) 0 SUPPORTED_REQ_CAP(i)
 
@@ -765,17 +752,12 @@ tds_alloc_locale(void)
 #define RES(i,n) |(((TDS_RES_ ## n / 8) == i)?(1<<(TDS_RES_ ## n & 7)):0)
 #define RESB(i) 0 SUPPORTED_RES_CAP(i)
 
+
 static const TDS_CAPABILITIES defaultcaps = { {
-     /* type,  len, data, data, data, data, data, data, data, data, data, data, data, data, data, data (14 bytes) */
-	{ 1, 14, { REQB(13), REQB(12), REQB(11), REQB(10), REQB(9), REQB(8), REQB(7),
-	           REQB(6),  REQB(5),  REQB(4),  REQB(3),  REQB(2), REQB(1), REQB(0) } },
-	{ 2, 14, { RESB(13), RESB(12), RESB(11), RESB(10), RESB(9), RESB(8), RESB(7),
-	           RESB(6),  RESB(5),  RESB(4),  RESB(3),  RESB(2), RESB(1), RESB(0) } }
+     /* type,  len, data, data, data, data, data, data, data, data, data, data, data (11 bytes) */
+	{ 1, 11, { REQB(10), REQB(9), REQB(8), REQB(7), REQB(6), REQB(5), REQB(4), REQB(3), REQB(2), REQB(1), REQB(0) } },
+	{ 2, 11, { RESB(10), RESB(9), RESB(8), RESB(7), RESB(6), RESB(5), RESB(4), RESB(3), RESB(2), RESB(1), RESB(0) } }
 } };
-/* check we match the values size */
-TDS_COMPILE_CHECK(tds_values_len, sizeof(defaultcaps.types[0].values) == 14);
-/* check we match the default size */
-TDS_COMPILE_CHECK(tds_cap_len, sizeof(defaultcaps) == TDS_MAX_CAPABILITY);
 
 /**
  * Initialize login structure with locale information and other stuff for connection
@@ -960,7 +942,6 @@ tds_alloc_login(int use_environment)
 
 	TEST_MALLOC(login, TDSLOGIN);
 	login->check_ssl_hostname = 1;
-	login->use_utf16 = 1;
 	tds_dstr_init(&login->server_name);
 	tds_dstr_init(&login->language);
 	tds_dstr_init(&login->server_charset);
@@ -970,7 +951,6 @@ tds_alloc_login(int use_environment)
 	tds_dstr_init(&login->user_name);
 	tds_dstr_init(&login->password);
 	tds_dstr_init(&login->library);
-	tds_dstr_init(&login->new_password);
 
 	login->ip_addrs = NULL;
 	login->connected_addr = NULL;
@@ -983,7 +963,6 @@ tds_alloc_login(int use_environment)
 	tds_dstr_init(&login->server_spn);
 	tds_dstr_init(&login->cafile);
 	tds_dstr_init(&login->crlfile);
-	tds_dstr_init(&login->db_filename);
 
 	if (use_environment) {
 		const char *s;
@@ -1000,7 +979,6 @@ tds_alloc_login(int use_environment)
 	}
 
 	login->capabilities = defaultcaps;
-    login->use_ntlmv2_specified = 0;
 
 	Cleanup:
 	return login;
@@ -1015,8 +993,6 @@ tds_free_login(TDSLOGIN * login)
 	/* for security reason clear memory */
 	tds_dstr_zero(&login->password);
 	tds_dstr_free(&login->password);
-	tds_dstr_zero(&login->new_password);
-	tds_dstr_free(&login->new_password);
 	tds_dstr_free(&login->server_name);
 	tds_dstr_free(&login->language);
 	tds_dstr_free(&login->server_charset);
@@ -1028,7 +1004,7 @@ tds_free_login(TDSLOGIN * login)
 	tds_dstr_free(&login->server_host_name);
 
 	if (login->ip_addrs != NULL)
-		freeaddrinfo(login->ip_addrs);
+		tds_freeaddrinfo(login->ip_addrs);
 
 	tds_dstr_free(&login->database);
 	tds_dstr_free(&login->dump_file);
@@ -1037,7 +1013,6 @@ tds_free_login(TDSLOGIN * login)
 	tds_dstr_free(&login->server_spn);
 	tds_dstr_free(&login->cafile);
 	tds_dstr_free(&login->crlfile);
-	tds_dstr_free(&login->db_filename);
 	free(login);
 }
 
@@ -1092,10 +1067,10 @@ tds_deinit_connection(TDSCONNECTION *conn)
 	tds_ssl_deinit(conn);
 	/* close connection and free inactive sockets */
 	tds_connection_close(conn);
-	tds_wakeup_close(&conn->wakeup);
+	CLOSESOCKET(conn->s_signal);
+	CLOSESOCKET(conn->s_signaled);
 	tds_iconv_free(conn);
 	free(conn->product_name);
-	free(conn->server);
 	tds_free_env(conn);
 #if ENABLE_ODBC_MARS
 	tds_mutex_free(&conn->list_mtx);
@@ -1110,16 +1085,20 @@ tds_deinit_connection(TDSCONNECTION *conn)
 static TDSCONNECTION *
 tds_init_connection(TDSCONNECTION *conn, TDSCONTEXT *context, unsigned int bufsize)
 {
+	int sv[2];
+
 	conn->env.block_size = bufsize;
-	conn->s = INVALID_SOCKET;
+	conn->s_signal = conn->s_signaled = conn->s = INVALID_SOCKET;
 	conn->use_iconv = 1;
 	conn->tds_ctx = context;
 
-	if (tds_wakeup_init(&conn->wakeup))
-		goto Cleanup;
-
 	if (tds_iconv_alloc(conn))
 		goto Cleanup;
+
+	if (tds_socketpair(AF_UNIX, SOCK_STREAM, 0, sv))
+		goto Cleanup;
+	conn->s_signal   = sv[0];
+	conn->s_signaled = sv[1];
 
 #if ENABLE_ODBC_MARS
 	if (tds_mutex_init(&conn->list_mtx))
@@ -1130,8 +1109,6 @@ tds_init_connection(TDSCONNECTION *conn, TDSCONTEXT *context, unsigned int bufsi
 	return conn;
 
 Cleanup:
-	tds_wakeup_close(&conn->wakeup);
-	tds_iconv_free(conn);
 	return NULL;
 }
 
@@ -1168,8 +1145,6 @@ tds_init_socket(TDSSOCKET * tds_socket, unsigned int bufsize)
 	return tds_socket;
 
       Cleanup:
-	tds_free_packets(tds_socket->recv_packet);
-	tds_free_packets(tds_socket->send_packet);
 	return NULL;
 }
 
@@ -1331,11 +1306,6 @@ tds_connection_remove_socket(TDSCONNECTION *conn, TDSSOCKET *tds)
 void
 tds_free_socket(TDSSOCKET * tds)
 {
-#if ENABLE_EXTRA_CHECKS
-	TDSDYNAMIC *dyn;
-	TDSCURSOR *cur;
-#endif
-
 	if (!tds)
 		return;
 
@@ -1343,24 +1313,13 @@ tds_free_socket(TDSSOCKET * tds)
 	tds_release_cur_dyn(tds);
 	tds_release_cursor(&tds->cur_cursor);
 	tds_detach_results(tds->current_results);
-#if ENABLE_EXTRA_CHECKS
-	for (dyn = tds->conn->dyns; dyn; dyn = dyn->next) {
-		if (dyn->res_info && dyn->res_info->attached_to == tds) {
-			assert(0);
-		}
-	}
-	for (cur = tds->conn->cursors; cur; cur = cur->next) {
-		if (cur->res_info && cur->res_info->attached_to == tds) {
-			assert(0);
-		}
-	}
-#endif
 	tds_free_all_results(tds);
 #if ENABLE_ODBC_MARS
 	tds_cond_destroy(&tds->packet_cond);
 #endif
 
-	tds_connection_remove_socket(tds->conn, tds);
+	if (tds->conn)
+		tds_connection_remove_socket(tds->conn, tds);
 	tds_free_packets(tds->recv_packet);
 	tds_free_packets(tds->send_packet);
 	free(tds);
@@ -1757,38 +1716,6 @@ tds_free_bcp_column_data(BCPCOLDATA * coldata)
 
 	free(coldata->data);
 	free(coldata);
-}
-
-TDSBCPINFO *
-tds_alloc_bcpinfo(void)
-{
-	TDSBCPINFO *bcpinfo;
-
-	TEST_MALLOC(bcpinfo, TDSBCPINFO);
-
-	tds_dstr_init(&bcpinfo->tablename);
-
-	return bcpinfo;
-Cleanup:
-	return NULL;
-}
-
-void
-tds_deinit_bcpinfo(TDSBCPINFO *bcpinfo)
-{
-	tds_dstr_free(&bcpinfo->tablename);
-	TDS_ZERO_FREE(bcpinfo->insert_stmt);
-	tds_free_results(bcpinfo->bindinfo);
-	bcpinfo->bindinfo = NULL;
-}
-
-void
-tds_free_bcpinfo(TDSBCPINFO *bcpinfo)
-{
-	if (bcpinfo) {
-		tds_deinit_bcpinfo(bcpinfo);
-		free(bcpinfo);
-	}
 }
 
 /**

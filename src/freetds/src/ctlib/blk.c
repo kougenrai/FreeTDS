@@ -36,31 +36,23 @@
 #include "ctlib.h"
 #include "replacements.h"
 
+TDS_RCSID(var, "$Id: blk.c,v 1.58 2011-09-25 11:36:24 freddy77 Exp $");
+
 static void _blk_null_error(TDSBCPINFO *bcpinfo, int index, int offset);
 static TDSRET _blk_get_col_data(TDSBCPINFO *bulk, TDSCOLUMN *bcpcol, int offset);
 static CS_RETCODE _blk_rowxfer_in(CS_BLKDESC * blkdesc, CS_INT rows_to_xfer, CS_INT * rows_xferred);
 static CS_RETCODE _blk_rowxfer_out(CS_BLKDESC * blkdesc, CS_INT rows_to_xfer, CS_INT * rows_xferred);
 
-#define CONN(bulk) ((CS_CONNECTION *) (bulk)->bcpinfo.parent)
-
-TDS_COMPILE_CHECK(same_size, sizeof(CS_BLKDESC) == sizeof(TDSBCPINFO));
-TDS_COMPILE_CHECK(nested_type, TDS_OFFSET(CS_BLKDESC, bcpinfo) == 0);
-
 CS_RETCODE
 blk_alloc(CS_CONNECTION * connection, CS_INT version, CS_BLKDESC ** blk_pointer)
 {
-	CS_BLKDESC *blkdesc;
-
 	tdsdump_log(TDS_DBG_FUNC, "blk_alloc(%p, %d, %p)\n", connection, version, blk_pointer);
 
-	blkdesc = (CS_BLKDESC *) tds_alloc_bcpinfo();
-	if (!blkdesc)
-		return CS_FAIL;
+	*blk_pointer = (CS_BLKDESC *) calloc(1, sizeof(CS_BLKDESC));
 
 	/* so we know who we belong to */
-	blkdesc->bcpinfo.parent = connection;
+	(*blk_pointer)->con = connection;
 
-	*blk_pointer = blkdesc;
 	return CS_SUCCEED;
 }
 
@@ -78,7 +70,7 @@ blk_bind(CS_BLKDESC * blkdesc, CS_INT item, CS_DATAFMT * datafmt, CS_VOID * buff
 	if (!blkdesc) {
 		return CS_FAIL;
 	}
-	con = CONN(blkdesc);
+	con = blkdesc->con;
 
 	if (item == CS_UNUSED) {
 		/* clear all bindings */
@@ -181,18 +173,23 @@ CS_RETCODE
 blk_describe(CS_BLKDESC * blkdesc, CS_INT item, CS_DATAFMT * datafmt)
 {
 	TDSCOLUMN *curcol;
+	int len;
 
 	tdsdump_log(TDS_DBG_FUNC, "blk_describe(%p, %d, %p)\n", blkdesc, item, datafmt);
 
 	if (item < 1 || item > blkdesc->bcpinfo.bindinfo->num_cols) {
-		_ctclient_msg(CONN(blkdesc), "blk_describe", 2, 5, 1, 141, "%s, %d", "colnum", item);
+		_ctclient_msg(blkdesc->con, "blk_describe", 2, 5, 1, 141, "%s, %d", "colnum", item);
 		return CS_FAIL;
 	}
 
 	curcol = blkdesc->bcpinfo.bindinfo->columns[item - 1];
+	len = tds_dstr_len(&curcol->column_name);
+	if (len >= CS_MAX_NAME)
+		len = CS_MAX_NAME - 1;
+	strncpy(datafmt->name, tds_dstr_cstr(&curcol->column_name), len);
 	/* name is always null terminated */
-	strlcpy(datafmt->name, tds_dstr_cstr(&curcol->column_name), sizeof(datafmt->name));
-	datafmt->namelen = strlen(datafmt->name);
+	datafmt->name[len] = 0;
+	datafmt->namelen = len;
 	/* need to turn the SYBxxx into a CS_xxx_TYPE */
 	datafmt->datatype = _ct_get_client_type(curcol);
 	tdsdump_log(TDS_DBG_INFO1, "blk_describe() datafmt->datatype = %d server type %d\n", datafmt->datatype,
@@ -227,12 +224,12 @@ blk_done(CS_BLKDESC * blkdesc, CS_INT type, CS_INT * outrow)
 
 	tdsdump_log(TDS_DBG_FUNC, "blk_done(%p, %d, %p)\n", blkdesc, type, outrow);
 
-	tds = CONN(blkdesc)->tds_socket;
+	tds = blkdesc->con->tds_socket;
 
 	switch (type) {
 	case CS_BLK_BATCH:
 		if (TDS_FAILED(tds_bcp_done(tds, &rows_copied))) {
-			_ctclient_msg(CONN(blkdesc), "blk_done", 2, 5, 1, 140, "");
+			_ctclient_msg(blkdesc->con, "blk_done", 2, 5, 1, 140, "");
 			return CS_FAIL;
 		}
 		
@@ -240,14 +237,14 @@ blk_done(CS_BLKDESC * blkdesc, CS_INT type, CS_INT * outrow)
 			*outrow = rows_copied;
 		
 		if (TDS_FAILED(tds_bcp_start(tds, &blkdesc->bcpinfo))) {
-			_ctclient_msg(CONN(blkdesc), "blk_done", 2, 5, 1, 140, "");
+			_ctclient_msg(blkdesc->con, "blk_done", 2, 5, 1, 140, "");
 			return CS_FAIL;
 		}
 		break;
 		
 	case CS_BLK_ALL:
 		if (TDS_FAILED(tds_bcp_done(tds, &rows_copied))) {
-			_ctclient_msg(CONN(blkdesc), "blk_done", 2, 5, 1, 140, "");
+			_ctclient_msg(blkdesc->con, "blk_done", 2, 5, 1, 140, "");
 			return CS_FAIL;
 		}
 		
@@ -255,7 +252,17 @@ blk_done(CS_BLKDESC * blkdesc, CS_INT type, CS_INT * outrow)
 			*outrow = rows_copied;
 		
 		/* free allocated storage in blkdesc & initialise flags, etc. */
-		tds_deinit_bcpinfo(&blkdesc->bcpinfo);
+	
+		if (blkdesc->bcpinfo.tablename)
+			TDS_ZERO_FREE(blkdesc->bcpinfo.tablename);
+	
+		if (blkdesc->bcpinfo.insert_stmt)
+			TDS_ZERO_FREE(blkdesc->bcpinfo.insert_stmt);
+	
+		if (blkdesc->bcpinfo.bindinfo) {
+			tds_free_results(blkdesc->bcpinfo.bindinfo);
+			blkdesc->bcpinfo.bindinfo = NULL;
+		}
 	
 		blkdesc->bcpinfo.direction = 0;
 		blkdesc->bcpinfo.bind_count = CS_UNUSED;
@@ -273,8 +280,13 @@ blk_drop(CS_BLKDESC * blkdesc)
 {
 	tdsdump_log(TDS_DBG_FUNC, "blk_drop(%p)\n", blkdesc);
 
-	/* this is possible as CS_BLKDESC contains just bcpinfo field */
-	tds_free_bcpinfo(&blkdesc->bcpinfo);
+	if (!blkdesc)
+		return CS_SUCCEED;
+
+	free(blkdesc->bcpinfo.tablename);
+	free(blkdesc->bcpinfo.insert_stmt);
+	tds_free_results(blkdesc->bcpinfo.bindinfo);
+	free(blkdesc);
 
 	return CS_SUCCEED;
 }
@@ -308,31 +320,47 @@ blk_init(CS_BLKDESC * blkdesc, CS_INT direction, CS_CHAR * tablename, CS_INT tna
 	}
 
 	if (direction != CS_BLK_IN && direction != CS_BLK_OUT ) {
-		_ctclient_msg(CONN(blkdesc), "blk_init", 2, 6, 1, 138, "");
+		_ctclient_msg(blkdesc->con, "blk_init", 2, 6, 1, 138, "");
 		return CS_FAIL;
 	}
 
 	if (!tablename) {
-		_ctclient_msg(CONN(blkdesc), "blk_init", 2, 6, 1, 139, "");
+		_ctclient_msg(blkdesc->con, "blk_init", 2, 6, 1, 139, "");
 		return CS_FAIL;
 	}
 	if (tnamelen == CS_NULLTERM)
 		tnamelen = strlen(tablename);
 
 	/* free allocated storage in blkdesc & initialise flags, etc. */
-	tds_deinit_bcpinfo(&blkdesc->bcpinfo);
+
+	if (blkdesc->bcpinfo.tablename) {
+		tdsdump_log(TDS_DBG_FUNC, "blk_init() freeing tablename\n");
+		free(blkdesc->bcpinfo.tablename);
+	}
+
+	if (blkdesc->bcpinfo.insert_stmt) {
+		tdsdump_log(TDS_DBG_FUNC, "blk_init() freeing insert_stmt\n");
+		TDS_ZERO_FREE(blkdesc->bcpinfo.insert_stmt);
+	}
+
+	if (blkdesc->bcpinfo.bindinfo) {
+		tdsdump_log(TDS_DBG_FUNC, "blk_init() freeing results\n");
+		tds_free_results(blkdesc->bcpinfo.bindinfo);
+		blkdesc->bcpinfo.bindinfo = NULL;
+	}
 
 	/* string can be no-nul terminated so copy with memcpy */
-	if (!tds_dstr_copyn(&blkdesc->bcpinfo.tablename, tablename, tnamelen)) {
-		return CS_FAIL;
-	}
+	blkdesc->bcpinfo.tablename = (char *) malloc(tnamelen + 1);
+	/* FIXME malloc can fail */
+	memcpy(blkdesc->bcpinfo.tablename, tablename, tnamelen);
+	blkdesc->bcpinfo.tablename[tnamelen] = 0;
 
 	blkdesc->bcpinfo.direction = direction;
 	blkdesc->bcpinfo.bind_count = CS_UNUSED;
 	blkdesc->bcpinfo.xfer_init = 0;
 
-	if (TDS_FAILED(tds_bcp_init(CONN(blkdesc)->tds_socket, &blkdesc->bcpinfo))) {
-		_ctclient_msg(CONN(blkdesc), "blk_init", 2, 5, 1, 140, "");
+	if (TDS_FAILED(tds_bcp_init(blkdesc->con->tds_socket, &blkdesc->bcpinfo))) {
+		_ctclient_msg(blkdesc->con, "blk_init", 2, 5, 1, 140, "");
 		return CS_FAIL;
 	}
 	blkdesc->bcpinfo.bind_count = CS_UNUSED;
@@ -370,13 +398,13 @@ blk_props(CS_BLKDESC * blkdesc, CS_INT action, CS_INT property, CS_VOID * buffer
 			return CS_SUCCEED;
 			break;
 		default:
-			_ctclient_msg(CONN(blkdesc), "blk_props", 2, 5, 1, 141, "%s, %d", "action", action);
+			_ctclient_msg(blkdesc->con, "blk_props", 2, 5, 1, 141, "%s, %d", "action", action);
 			break;
 		}
 		break;
 
 	default:
-		_ctclient_msg(CONN(blkdesc), "blk_props", 2, 5, 1, 141, "%s, %d", "property", property);
+		_ctclient_msg(blkdesc->con, "blk_props", 2, 5, 1, 141, "%s, %d", "property", property);
 		break;
 	}
 	return CS_FAIL;
@@ -480,10 +508,10 @@ _blk_rowxfer_out(CS_BLKDESC * blkdesc, CS_INT rows_to_xfer, CS_INT * rows_xferre
 
 	tdsdump_log(TDS_DBG_FUNC, "_blk_rowxfer_out(%p, %d, %p)\n", blkdesc, rows_to_xfer, rows_xferred);
 
-	if (!blkdesc || !CONN(blkdesc))
+	if (!blkdesc || !blkdesc->con)
 		return CS_FAIL;
 
-	tds = CONN(blkdesc)->tds_socket;
+	tds = blkdesc->con->tds_socket;
 
 	/*
 	 * the first time blk_xfer called after blk_init()
@@ -492,8 +520,8 @@ _blk_rowxfer_out(CS_BLKDESC * blkdesc, CS_INT rows_to_xfer, CS_INT * rows_xferre
 
 	if (blkdesc->bcpinfo.xfer_init == 0) {
 
-		if (TDS_FAILED(tds_submit_queryf(tds, "select * from %s", tds_dstr_cstr(&blkdesc->bcpinfo.tablename)))) {
-			_ctclient_msg(CONN(blkdesc), "blk_rowxfer", 2, 5, 1, 140, "");
+		if (TDS_FAILED(tds_submit_queryf(tds, "select * from %s", blkdesc->bcpinfo.tablename))) {
+			_ctclient_msg(blkdesc->con, "blk_rowxfer", 2, 5, 1, 140, "");
 			return CS_FAIL;
 		}
 
@@ -503,7 +531,7 @@ _blk_rowxfer_out(CS_BLKDESC * blkdesc, CS_INT rows_to_xfer, CS_INT * rows_xferre
 		}
 	
 		if (ret != TDS_SUCCESS || result_type != TDS_ROW_RESULT) {
-			_ctclient_msg(CONN(blkdesc), "blk_rowxfer", 2, 5, 1, 140, "");
+			_ctclient_msg(blkdesc->con, "blk_rowxfer", 2, 5, 1, 140, "");
 			return CS_FAIL;
 		}
 
@@ -523,7 +551,7 @@ _blk_rowxfer_out(CS_BLKDESC * blkdesc, CS_INT rows_to_xfer, CS_INT * rows_xferre
 		case TDS_SUCCESS:
 			if (result_type == TDS_ROW_RESULT || result_type == TDS_COMPUTE_RESULT) {
 				if (result_type == TDS_ROW_RESULT) {
-					if (_ct_bind_data( CONN(blkdesc)->ctx, tds->current_results, blkdesc->bcpinfo.bindinfo, temp_count))
+					if (_ct_bind_data( blkdesc->con->ctx, tds->current_results, blkdesc->bcpinfo.bindinfo, temp_count))
 						return CS_ROW_FAIL;
 					if (rows_xferred)
 						*rows_xferred = *rows_xferred + 1;
@@ -535,7 +563,7 @@ _blk_rowxfer_out(CS_BLKDESC * blkdesc, CS_INT rows_to_xfer, CS_INT * rows_xferre
 			break;
 
 		default:
-			_ctclient_msg(CONN(blkdesc), "blk_rowxfer", 2, 5, 1, 140, "");
+			_ctclient_msg(blkdesc->con, "blk_rowxfer", 2, 5, 1, 140, "");
 			return CS_FAIL;
 			break;
 		}
@@ -555,7 +583,7 @@ _blk_rowxfer_in(CS_BLKDESC * blkdesc, CS_INT rows_to_xfer, CS_INT * rows_xferred
 	if (!blkdesc)
 		return CS_FAIL;
 
-	tds = CONN(blkdesc)->tds_socket;
+	tds = blkdesc->con->tds_socket;
 
 	/*
 	 * the first time blk_xfer called after blk_init()
@@ -570,13 +598,14 @@ _blk_rowxfer_in(CS_BLKDESC * blkdesc, CS_INT rows_to_xfer, CS_INT * rows_xferred
 		 */
 
 		if (TDS_FAILED(tds_bcp_start_copy_in(tds, &blkdesc->bcpinfo))) {
-			_ctclient_msg(CONN(blkdesc), "blk_rowxfer", 2, 5, 1, 140, "");
+			_ctclient_msg(blkdesc->con, "blk_rowxfer", 2, 5, 1, 140, "");
 			return CS_FAIL;
 		}
 
 		blkdesc->bcpinfo.xfer_init = 1;
 	} 
 
+	blkdesc->bcpinfo.parent = blkdesc;
 	for (each_row = 0; each_row < rows_to_xfer; each_row++ ) {
 
 		if (tds_bcp_send_record(tds, &blkdesc->bcpinfo, _blk_get_col_data, _blk_null_error, each_row) == TDS_SUCCESS) {
@@ -590,11 +619,11 @@ _blk_rowxfer_in(CS_BLKDESC * blkdesc, CS_INT rows_to_xfer, CS_INT * rows_xferred
 static void
 _blk_null_error(TDSBCPINFO *bcpinfo, int index, int offset)
 {
-	CS_BLKDESC *blkdesc = (CS_BLKDESC *) bcpinfo;
+	CS_BLKDESC *blkdesc = (CS_BLKDESC *) bcpinfo->parent;
 
 	tdsdump_log(TDS_DBG_FUNC, "_blk_null_error(%p, %d, %d)\n", bcpinfo, index, offset);
 
-	_ctclient_msg(CONN(blkdesc), "blk_rowxfer", 2, 7, 1, 142, "%d, %d",  index + 1, offset + 1);
+	_ctclient_msg(blkdesc->con, "blk_rowxfer", 2, 7, 1, 142, "%d, %d",  index + 1, offset + 1);
 }
 
 static TDSRET
@@ -609,8 +638,8 @@ _blk_get_col_data(TDSBCPINFO *bulk, TDSCOLUMN *bindcol, int offset)
 	CS_INT      destlen  = 0;
 	CS_SMALLINT *nullind = NULL;
 	CS_INT      *datalen = NULL;
-	CS_BLKDESC *blkdesc = (CS_BLKDESC *) bulk;
-	CS_CONTEXT *ctx = CONN(blkdesc)->ctx;
+	CS_BLKDESC *blkdesc = (CS_BLKDESC *) bulk->parent;
+	CS_CONTEXT *ctx = blkdesc->con->ctx;
 	CS_DATAFMT srcfmt, destfmt;
 
 	tdsdump_log(TDS_DBG_FUNC, "_blk_get_col_data(%p, %p, %d)\n", bulk, bindcol, offset);
@@ -621,11 +650,6 @@ _blk_get_col_data(TDSBCPINFO *bulk, TDSCOLUMN *bindcol, int offset)
 	 */
 
 	src = (unsigned char *) bindcol->column_varaddr;
-	if (!src) {
-		tdsdump_log(TDS_DBG_ERROR, "error source field not addressable\n");
-		return TDS_FAIL;
-	}
-
 	src += offset * bindcol->column_bindlen;
 	
 	if (bindcol->column_nullbind) {
@@ -635,6 +659,11 @@ _blk_get_col_data(TDSBCPINFO *bulk, TDSCOLUMN *bindcol, int offset)
 	if (bindcol->column_lenbind) {
 		datalen = bindcol->column_lenbind;
 		datalen += offset;
+	}
+
+	if (!src) {
+		printf("error source field not addressable \n");
+		return TDS_FAIL;
 	}
 
 	srctype = bindcol->column_bindtype; 		/* passes to cs_convert */

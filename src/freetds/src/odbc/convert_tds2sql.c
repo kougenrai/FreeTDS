@@ -36,7 +36,8 @@
 #include <freetds/convert.h>
 #include <freetds/iconv.h>
 #include <freetds/string.h>
-#include <odbcss.h>
+
+TDS_RCSID(var, "$Id: convert_tds2sql.c,v 1.80 2011-09-18 17:22:29 freddy77 Exp $");
 
 #define TDS_ISSPACE(c) isspace((unsigned char) (c))
 
@@ -84,7 +85,8 @@ odbc_convert_char(TDS_STMT * stmt, TDSCOLUMN * curcol, TDS_CHAR * src, TDS_UINT 
 		/* TODO check return value */
 		tds_iconv(tds, conv, to_client, &ib, &il, &ob, &ol);
 		ol = ob - dest; /* bytes written */
-		curcol->column_text_sqlgetdatapos += ib - src;
+		if (curcol)
+			curcol->column_text_sqlgetdatapos += ib - src;
 		/* terminate string */
 		memset(ob, 0, char_size);
 	}
@@ -143,33 +145,12 @@ odbc_tds_convert_wide_iso(TDSCOLUMN *curcol, TDS_CHAR *src, TDS_UINT srclen, TDS
 	return p - buf;
 }
 
-/* The following structure is going to write in these structure not using them
- * but just knowing the ABI. Check these ABI. Mainly make sure the alignment
- * is still correct.
- */
-TDS_COMPILE_CHECK(ss_time2, sizeof(SQL_SS_TIME2_STRUCT) == 12
-	&& TDS_OFFSET(SQL_SS_TIME2_STRUCT, fraction) == 8);
-TDS_COMPILE_CHECK(ss_timestampoffset, sizeof(SQL_SS_TIMESTAMPOFFSET_STRUCT) == 20
-	&& TDS_OFFSET(SQL_SS_TIMESTAMPOFFSET_STRUCT, fraction) == 12);
-TDS_COMPILE_CHECK(date_struct, sizeof(DATE_STRUCT) == 6
-	&& TDS_OFFSET(DATE_STRUCT, year) == 0
-	&& TDS_OFFSET(DATE_STRUCT, month) == 2
-	&& TDS_OFFSET(DATE_STRUCT, day) == 4);
-TDS_COMPILE_CHECK(timestamp_struct, sizeof(TIMESTAMP_STRUCT) == 16
-	&& TDS_OFFSET(TIMESTAMP_STRUCT, year) == 0
-	&& TDS_OFFSET(TIMESTAMP_STRUCT, month) == 2
-	&& TDS_OFFSET(TIMESTAMP_STRUCT, day) == 4
-	&& TDS_OFFSET(TIMESTAMP_STRUCT, hour) == 6
-	&& TDS_OFFSET(TIMESTAMP_STRUCT, minute) == 8
-	&& TDS_OFFSET(TIMESTAMP_STRUCT, second) == 10
-	&& TDS_OFFSET(TIMESTAMP_STRUCT, fraction) == 12);
-
 /**
  * Handle conversions from MSSQL 2008 DATE/TIME types to binary.
  * These types have a different binary representation in libTDS.
  */
 static SQLLEN
-odbc_convert_datetime_to_binary(TDS_STMT * stmt, TDSCOLUMN *curcol, int srctype, TDS_DATETIMEALL * dta, TDS_CHAR * dest, SQLULEN destlen)
+odbc_convert_msdatetime_to_binary(TDS_STMT * stmt, TDSCOLUMN *curcol, int srctype, TDS_DATETIMEALL * dta, TDS_CHAR * dest, SQLULEN destlen)
 {
 	size_t len, cplen;
 	TDS_USMALLINT buf[10];
@@ -178,13 +159,13 @@ odbc_convert_datetime_to_binary(TDS_STMT * stmt, TDSCOLUMN *curcol, int srctype,
 	tds_datecrack(srctype, dta, &when);
 
 	len = 0;
-	if (srctype != SYBMSTIME && srctype != SYBTIME && srctype != SYB5BIGTIME) {
+	if (srctype != SYBMSTIME) {
 		buf[0] = when.year;
 		buf[1] = when.month + 1;
 		buf[2] = when.day;
 		len = 3;
 	}
-	if (srctype != SYBMSDATE && srctype != SYBDATE) {
+	if (srctype != SYBMSDATE) {
 		buf[len++] = when.hour;
 		buf[len++] = when.minute;
 		buf[len++] = when.second;
@@ -217,26 +198,27 @@ odbc_convert_to_binary(TDS_STMT * stmt, TDSCOLUMN *curcol, int srctype, TDS_CHAR
 {
 	SQLLEN ret = srclen;
 
-	/* special case for date/time */
+	/* special case for MS date/time */
 	switch (srctype) {
 	case SYBMSTIME:
 	case SYBMSDATE:
 	case SYBMSDATETIME2:
 	case SYBMSDATETIMEOFFSET:
-	case SYBDATE:
-	case SYBTIME:
-	case SYB5BIGTIME:
-	case SYB5BIGDATETIME:
-		return odbc_convert_datetime_to_binary(stmt, curcol, srctype, (TDS_DATETIMEALL *) src, dest, destlen);
+		return odbc_convert_msdatetime_to_binary(stmt, curcol, srctype, (TDS_DATETIMEALL *) src, dest, destlen);
 	}
 
-	/* if destlen == 0 we return only length */
 	if (destlen > 0) {
 		size_t cplen = (destlen > srclen) ? srclen : destlen;
-		/* do not NUL terminate binary buffer */
+		/* do not NULL terminate binary buffer */
 		memcpy(dest, src, cplen);
 		if (curcol)
 			curcol->column_text_sqlgetdatapos += cplen;
+	} else {
+		/* if destlen == 0 we return only length */
+		if (destlen != 0) {
+			odbc_errs_add(&stmt->errs, "07006", NULL);
+			return SQL_NULL_DATA;
+		}
 	}
 	return ret;
 }
@@ -348,42 +330,20 @@ odbc_tds2sql(TDS_STMT * stmt, TDSCOLUMN *curcol, int srctype, TDS_CHAR * src, TD
 	if (desttype == SQL_C_CHAR || desttype == SQL_C_WCHAR) {
 		char buf[48];
 		TDSDATEREC when;
-		int prec;
+		int prec = 3;
 		const char *fmt = NULL;
 		const TDS_DATETIMEALL *dta = (const TDS_DATETIMEALL *) src;
 
 		switch (srctype) {
 		case SYBMSDATETIMEOFFSET:
-		case SYBMSDATETIME2:
-			prec = dta->time_prec;
-			goto datetime;
-		case SYB5BIGDATETIME:
-			prec = 6;
-			goto datetime;
-		case SYBDATETIME:
-			prec = 3;
-			goto datetime;
-		case SYBDATETIME4:
-			prec = 0;
-		datetime:
-			fmt = "%Y-%m-%d %H:%M:%S.%z";
-			break;
+		case SYBMSDATETIME2: prec = dta->time_prec;
+		case SYBDATETIME:  fmt = "%Y-%m-%d %H:%M:%S.%z"; if (prec) break;
+		case SYBDATETIME4: fmt = "%Y-%m-%d %H:%M:%S"; break;
 		case SYBMSTIME:
 			prec = dta->time_prec;
-			goto time;
-		case SYB5BIGTIME:
-			prec = 6;
-			goto time;
-		case SYBTIME:
-			prec = 3;
-		time:
-			fmt = "%H:%M:%S.%z";
+			fmt = prec ? "%H:%M:%S.%z" : "%H:%M:%S";
 			break;
-		case SYBMSDATE:
-		case SYBDATE:
-			prec = 0;
-			fmt = "%Y-%m-%d";
-			break;
+		case SYBMSDATE:    fmt = "%Y-%m-%d"; break;
 		}
 		if (!fmt) goto normal_conversion;
 
@@ -595,8 +555,13 @@ normal_conversion:
 		break;
 #endif
 
+	case SQL_C_BINARY:
+		/* type already handled */
+		assert(desttype != SQL_C_BINARY);
+
 	default:
 		break;
+
 	}
 
 	return ret;

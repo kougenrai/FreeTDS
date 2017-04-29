@@ -26,10 +26,6 @@
 #include <windows.h>
 #endif
 
-#if HAVE_UNISTD_H
-#include <unistd.h>
-#endif /* HAVE_UNISTD_H */
-
 #if HAVE_ERRNO_H
 #include <errno.h>
 #endif
@@ -37,8 +33,10 @@
 #include <freetds/tds.h>
 #include "replacements.h"
 
+TDS_RCSID(var, "$Id: socketpair.c,v 1.2 2012-03-04 11:34:22 freddy77 Exp $");
+
 int
-tds_socketpair(int domain, int type, int protocol, TDS_SYS_SOCKET sv[2])
+tds_socketpair(int domain, int type, int protocol, int sv[2])
 {
 	struct sockaddr_in sa, sa2;
 	SOCKLEN_T addrlen;

@@ -11,22 +11,17 @@ dnl ------------------------------------------------------------
 # ------------------------------------------------------------
 # Initialization
 # ------------------------------------------------------------
-AC_INIT(FreeTDS, 1.00.6)
+AC_INIT(FreeTDS, 0.95)
 AC_CONFIG_SRCDIR(src/dblib/dblib.c)
 AC_PREREQ(2.53)
 
-AM_INIT_AUTOMAKE([dist-bzip2 parallel-tests subdir-objects])
+AM_INIT_AUTOMAKE([dist-bzip2 parallel-tests])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES(yes)])
 AC_CONFIG_HEADERS(include/config.h)
 AC_CONFIG_MACRO_DIR([m4])
 
 dnl configuration directory will be /usr/local/etc
 AC_PREFIX_DEFAULT(/usr/local)
-
-dnl This disable address sanitizer leak detector as
-dnl some checks cause leaks which are detected as errors
-ASAN_OPTIONS='detect_leaks=0'
-export ASAN_OPTIONS
 
 dnl 0.X.Y -> 0.X.Y
 dnl 0.X.dev.date -> 0.(X-1).9999
@@ -58,8 +53,8 @@ AC_PROG_GREP
 AC_PROG_INSTALL
 AC_PROG_MKDIR_P
 AC_PROG_LN_S
+AC_PROG_RANLIB
 AC_PROG_SED
-PKG_PROG_PKG_CONFIG
 
 # ------------------------------------------------------------
 # Host-specific configuration
@@ -109,7 +104,8 @@ define([AC_LIBTOOL_LANG_CXX_CONFIG], [:])dnl
 define([AC_LIBTOOL_LANG_F77_CONFIG], [:])dnl
 define([AC_LIBTOOL_LANG_GCJ_CONFIG], [:])dnl
 
-LT_INIT([win32-dll])
+AC_LIBTOOL_WIN32_DLL
+AC_PROG_LIBTOOL
 AC_LTDL_DLLIB
 LT_AC_PROG_RC
 
@@ -129,6 +125,7 @@ fi
 AC_CHECK_PROG(DOXYGEN,doxygen,doxygen)
 AM_CONDITIONAL(HAVE_DOXYGEN, [test -n "$DOXYGEN"])
 AC_CHECK_PROG(ODBC_CONFIG,odbc_config,odbc_config)
+AC_CHECK_PROG(PKG_CONFIG,pkg-config,pkg-config)
 
 # ------------------------------------------------------------
 # Check for CVS-only sources.
@@ -165,7 +162,8 @@ case $enable_krb5 in
   *) krb5_libs="-l$enable_krb5" ;;
 esac
 
-ACX_PUSH_LIBS("")
+OLDLIBS="$LIBS"
+LIBS=""
 tds_mingw=no
 case $host in
 *-*-mingw*)
@@ -230,16 +228,17 @@ if test -n "$krb5_libs"; then
 fi
 
 NETWORK_LIBS="$LIBS"
-ACX_POP_LIBS
+LIBS="$OLDLIBS"
 AC_SUBST(NETWORK_LIBS)
 
 if test $tds_mingw = no; then
 	# readline test
 	# Readline is needed by the tty session. Set up a special READLINE_LIBS
 	# substitution for it.
+	OLDLIBS="$LIBS"
 	# Readline is linked with curses, and on some systems termcap must be
 	# linked in. Others (inc debian) have termcap built into ncurses.
-	ACX_PUSH_LIBS("")
+	LIBS=""
 	AC_SEARCH_LIBS(tgetent, [readline ncurses curses termcap])
 	AC_CHECK_LIB([readline], [readline], [LIBS="$LIBS -lreadline"
 	  AC_DEFINE(HAVE_READLINE, 1, [Define to 1 if you have the GNU Readline library.])], [LIBS=""] )
@@ -263,7 +262,7 @@ int main()
 }
 ]])],AC_DEFINE(HAVE_RL_INHIBIT_COMPLETION, 1, [Define to 1 if you have rl_inhibit_completion.]))
 	READLINE_LIBS="$LIBS"
-	ACX_POP_LIBS
+	LIBS="$OLDLIBS"
 	AC_SUBST(READLINE_LIBS)
 
 	ACX_PTHREAD
@@ -271,7 +270,7 @@ int main()
 	AC_SUBST(AM_CFLAGS)
 	LIBS="$PTHREAD_LIBS $LIBS"
 	AC_SEARCH_LIBS(pthread_condattr_setclock, [rt posix4 pthread])
-	AC_CHECK_FUNCS([pthread_condattr_setclock pthread_cond_timedwait_relative_np])
+	AC_CHECK_FUNCS([pthread_condattr_setclock])
 fi
 
 # check for SSPI
@@ -297,15 +296,13 @@ AC_CHECK_MEMBERS([struct tm.__tm_zone],,,[#include <sys/types.h>
 ])
 AC_CHECK_HEADERS([errno.h libgen.h \
 	limits.h locale.h poll.h \
-	signal.h stddef.h \
+	readpassphrase.h signal.h stddef.h \
 	sys/param.h sys/select.h sys/stat.h \
 	sys/time.h sys/types.h sys/resource.h \
-	sys/eventfd.h \
 	sys/wait.h unistd.h netdb.h \
 	wchar.h inttypes.h winsock2.h \
-	localcharset.h valgrind/memcheck.h malloc.h dirent.h \
-	stdbool.h gnutls/abstract.h getopt.h])
-AC_CHECK_HEADERS([windows.h sql.h],[],[],[[#ifdef HAVE_WINDOWS_H
+	localcharset.h valgrind/memcheck.h malloc.h dirent.h])
+AC_CHECK_HEADERS([windows.h sql.h odbcss.h],[],[],[[#ifdef HAVE_WINDOWS_H
 # include <windows.h>
 #endif
 #ifdef HAVE_SQL_H
@@ -424,7 +421,7 @@ TYPE_SOCKLEN_T
 AC_MSG_CHECKING([whether getopt has optreset support])
 AC_TRY_LINK([#ifdef HAVE_GETOPT_H
 #include <getopt.h>
-#endif], [optreset = 0;],
+#endif], [extern int optreset; optreset = 0;],
 [AC_MSG_RESULT(yes)
 AC_DEFINE(HAVE_GETOPT_OPTRESET, 1, [Define if your getopt(3) defines and uses optreset])],
 [AC_MSG_RESULT(no)]
@@ -484,14 +481,14 @@ TDS_NULL_IS_ZERO
 # ------------------------------------------------------------
 # Checks for library functions.
 # ------------------------------------------------------------
-AC_CHECK_FUNCS([vsnprintf _vsnprintf _vscprintf gettimeofday \
+AC_CHECK_FUNCS([_atoi64 vsnprintf _vsnprintf _vscprintf gettimeofday \
 nl_langinfo locale_charset setenv putenv \
 getuid getpwuid getpwuid_r fstat alarm fork \
-gethrtime localtime_r setitimer eventfd \
+gethrtime localtime_r setitimer _lseeki64 _telli64 \
 _fseeki64 _ftelli64 setrlimit pthread_cond_timedwait \
 _lock_file _unlock_file usleep nanosleep readdir_r])
-
-ACX_PUSH_LIBS("$LIBS $NETWORK_LIBS")
+OLD_LIBS="$LIBS"
+LIBS="$LIBS $NETWORK_LIBS"
 AC_CHECK_FUNCS([inet_ntoa_r getipnodebyaddr getipnodebyname \
 getaddrinfo inet_ntop gethostname poll socketpair])
 AC_TRY_LINK([#ifdef HAVE_SYS_TYPES_H
@@ -509,13 +506,12 @@ AC_TRY_LINK([#ifdef HAVE_SYS_TYPES_H
 #endif],
 [return getaddrinfo(NULL, NULL, NULL, NULL);],
 AC_DEFINE(HAVE_GETADDRINFO, 1, [Define if you have getaddrinfo function]))
-ACX_POP_LIBS
 
+LIBS="$OLD_LIBS"
 AC_REPLACE_FUNCS([asprintf vasprintf strtok_r readpassphrase \
-strlcpy strlcat basename getopt strsep daemon])
+strlcpy strlcat basename getopt strsep])
 AC_FUNC_FSEEKO
 TDS_GETTIMEMILLI
-AC_FUNC_ALLOCA
 
 # ------------------------------------------------------------
 # Checks for library variables.
@@ -528,19 +524,22 @@ AC_HAVE_MALLOC_OPTIONS
 AC_MSG_RESULT(checking compile-time options)
 
 AC_ARG_WITH(tdsver,
-AS_HELP_STRING([--with-tdsver=VERSION], [TDS protocol version (4.2/4.6/5.0/7.0/7.1/7.2/7.3/7.4/auto) [auto]]))
-case "$with_tdsver" in
-4.2) AC_DEFINE(TDS42, 1, [Define to use TDS 4.2 by default]) ;;
-4.6) AC_DEFINE(TDS46, 1, [Define to use TDS 4.6 by default]) ;;
-5.0) AC_DEFINE(TDS50, 1, [Define to use TDS 5.0 by default]) ;;
-7.0) AC_DEFINE(TDS70, 1, [Define to use TDS 7.0 by default]) ;;
-7.1) AC_DEFINE(TDS71, 1, [Define to use TDS 7.1 by default]) ;;
-7.2) AC_DEFINE(TDS72, 1, [Define to use TDS 7.2 by default]) ;;
-7.3) AC_DEFINE(TDS73, 1, [Define to use TDS 7.3 by default]) ;;
-7.4) AC_DEFINE(TDS74, 1, [Define to use TDS 7.4 by default]) ;;
-""|auto) ;;
-*)   AC_ERROR([Invalid value specified for --with-tdsver: $with_tdsver]) ;;
-esac
+AS_HELP_STRING([--with-tdsver=VERSION], [TDS protocol version (4.2/4.6/5.0/7.0/7.1/7.2/7.3) [5.0]]))
+if test "$with_tdsver" = "4.2"; then
+	AC_DEFINE(TDS42, 1, [Define to use TDS 4.2 by default])
+elif test "$with_tdsver" = "4.6"; then
+	AC_DEFINE(TDS46, 1, [Define to use TDS 4.6 by default])
+elif test "$with_tdsver" = "7.0"; then
+	AC_DEFINE(TDS70, 1, [Define to use TDS 7.0 by default])
+elif test "$with_tdsver" = "7.1"; then
+	AC_DEFINE(TDS71, 1, [Define to use TDS 7.1 by default])
+elif test "$with_tdsver" = "7.2"; then
+	AC_DEFINE(TDS72, 1, [Define to use TDS 7.2 by default])
+elif test "$with_tdsver" = "7.3"; then
+	AC_DEFINE(TDS73, 1, [Define to use TDS 7.3 by default])
+else
+	AC_DEFINE(TDS50, 1, [Define to use TDS 5.0 by default])
+fi
 
 AC_ARG_WITH(iodbc,
 AS_HELP_STRING([--with-iodbc=DIR], [build odbc driver against iODBC in DIR]))
@@ -616,9 +615,7 @@ if test "$build_odbc" = "yes"
 then
 	case $host_os in
 	darwin* | rhapsody*)
-		if test "$with_odbc_nodm" = ""; then
-			FREETDS_ODBC_MODULE="-module"
-		fi
+		FREETDS_ODBC_MODULE="-module"
 		;;
 	esac
 	AC_SUBST(FREETDS_ODBC_MODULE)
@@ -725,48 +722,21 @@ AC_SUBST(ODBCINSTLIB)
 AC_SUBST(ODBCNODMLIB)
 AC_SUBST(ODBCNODMLIBAPP)
 
-AC_DEFUN([TDS_CHECK_GMP], [
-AC_TRY_LINK([#include <stdio.h>
-#include <gmp.h>],
-[mpz_t x; mpz_init(x); mpz_powm(x,x,x,x); mpz_clear(x); return 0;],
-AC_DEFINE(HAVE_GMP, 1, [Define if you have GMP library]),
-[$1])])
-
-AC_DEFUN([TDS_HAVE_GMP],
-[TDS_CHECK_GMP([gmp_save_LIBS="$LIBS"
-LIBS="$LIBS -lgmp"
-TDS_CHECK_GMP([LIBS="$gmp_save_LIBS"])])])
-
 AC_ARG_WITH(gnutls,
-AS_HELP_STRING([--with-gnutls], [build with GnuTLS support]))
+AS_HELP_STRING([--with-gnutls], [build with TLS support]))
 if test "$with_gnutls" = "yes"; then
-	AC_DEFINE(HAVE_GNUTLS, 1, [Define to 1 if you have GnuTLS.])
-	gnutls_backend=unknown
-	PKG_CHECK_MODULES(GNUTLS, gnutls,
-		[CPPFLAGS="$CPPFLAGS $GNUTLS_CFLAGS"
-		NETWORK_LIBS="$NETWORK_LIBS $GNUTLS_LIBS"
-		if "$PKG_CONFIG" --libs --static gnutls | grep nettle > /dev/null 2>&1 ; then
-			gnutls_backend=nettle
-			AC_DEFINE(GNUTLS_USE_NETTLE, 1, [Define to 1 if GNU tls use nettle as backend.])
-			PKG_CHECK_MODULES(NETTLE, nettle,
-				[AC_DEFINE(HAVE_NETTLE, 1, [Define to 1 if nettle is present.])
-				NETWORK_LIBS="$NETWORK_LIBS $NETTLE_LIBS"])
-			ACX_PUSH_LIBS("$NETWORK_LIBS")
-			TDS_HAVE_GMP
-			AC_SEARCH_LIBS(nettle_rsa_public_key_init, [nettle hogweed])
-			NETWORK_LIBS="$LIBS"
-			ACX_POP_LIBS
-		fi],
-		[CPPFLAGS="$CPPFLAGS `libgnutls-config --cflags`"
-		NETWORK_LIBS="$NETWORK_LIBS `libgnutls-config --libs`"]
-	)
-	ACX_PUSH_LIBS("$NETWORK_LIBS")
-	AC_CHECK_FUNCS([gnutls_certificate_set_verify_function gnutls_record_disable_padding gnutls_rnd])
-	ACX_POP_LIBS
-	if test "$gnutls_backend" = "unknown"; then
-		gnutls_backend=gcrypt
-		NETWORK_LIBS="$NETWORK_LIBS -ltasn1"
+	AC_DEFINE(HAVE_GNUTLS, 1, [Define to 1 if you have GNU tls.])
+	if test "$PKG_CONFIG" != "" && "$PKG_CONFIG" --exists gnutls > /dev/null 2>&1; then
+		CPPFLAGS="$CPPFLAGS `$PKG_CONFIG --cflags gnutls`"
+		NETWORK_LIBS="$NETWORK_LIBS `$PKG_CONFIG --libs gnutls`"
+	else
+		CPPFLAGS="$CPPFLAGS `libgnutls-config --cflags`"
+		NETWORK_LIBS="$NETWORK_LIBS `libgnutls-config --libs`"
 	fi
+	OLDLIBS="$LIBS"
+	LIBS="$LIBS $NETWORK_LIBS"
+	AC_CHECK_FUNCS([gnutls_record_disable_padding])
+	LIBS="$OLDLIBS"
 else
 	CHECK_OPENSSL
 fi
@@ -822,12 +792,14 @@ AM_CONDITIONAL(ENABLE_THREADSAFE, test "$enable_threadsafe" != "no")
 # newer gcc are configured to fail to resolve references to libraries not
 # explicitly listed on the linker commandline.
 # So to make build add explicitly gcrypt library.
-if test "$enable_threadsafe" != "no" -a "$with_gnutls" = "yes" -a "$gnutls_backend" = "gcrypt"; then
-	PKG_CHECK_MODULES(GCRYPT, gcrypt,
-		[CPPFLAGS="$CPPFLAGS $GCRYPT_CFLAGS"
-		NETWORK_LIBS="$NETWORK_LIBS $GCRYPT_LIBS"],
-		[CPPFLAGS="$CPPFLAGS `libgcrypt-config --cflags`"
-		NETWORK_LIBS="$NETWORK_LIBS `libgcrypt-config --libs`"])
+if test "$enable_threadsafe" != "no" -a "$with_gnutls" = "yes"; then
+	if test "$PKG_CONFIG" != "" && "$PKG_CONFIG" --exists gcrypt> /dev/null 2>&1; then
+		CPPFLAGS="$CPPFLAGS `$PKG_CONFIG --cflags gcrypt`"
+		NETWORK_LIBS="$NETWORK_LIBS `$PKG_CONFIG --libs gcrypt`"
+	else
+		CPPFLAGS="$CPPFLAGS `libgcrypt-config --cflags`"
+		NETWORK_LIBS="$NETWORK_LIBS `libgcrypt-config --libs`"
+	fi
 fi
 
 # we don't need to check netdb functions if they are already threadsafe
@@ -947,10 +919,9 @@ AC_CONFIG_FILES(include/freetds/version.h \
 	src/apps/Makefile \
 	src/apps/fisql/Makefile \
 	freetds.spec \
-	win32/Makefile \
-	win32/freetds.nsh \
-	src/odbc/version.rc \
-	vms/Makefile misc/Makefile \
+	win32/Makefile win32/config.h \
+	win32/version.rc win32/freetds.nsh \
+	vms/Makefile \
 	doc/freebcp.1 doc/tsql.1 doc/osql.1 \
 	doc/bsqldb.1 doc/bsqlodbc.1 doc/defncopy.1 \
 	doc/datacopy.1 doc/fisql.1 doc/freetds.conf.5

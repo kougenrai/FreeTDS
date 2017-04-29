@@ -1,6 +1,9 @@
 #define TDS_DONT_DEFINE_DEFAULT_FUNCTIONS
 #include "common.h"
 
+static char software_version[] = "$Id: common.c,v 1.33 2012-03-11 15:52:22 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
+
 char USER[512];
 char SERVER[512];
 char PASSWORD[512];
@@ -79,17 +82,14 @@ try_tds_login(TDSLOGIN ** login, TDSSOCKET ** tds, const char *appname, int verb
 		fprintf(stderr, "tds_alloc_login() failed.\n");
 		return TDS_FAIL;
 	}
-	if (!tds_set_passwd(*login, PASSWORD)
-	    || !tds_set_user(*login, USER)
-	    || !tds_set_app(*login, appname)
-	    || !tds_set_host(*login, "myhost")
-	    || !tds_set_library(*login, "TDS-Library")
-	    || !tds_set_server(*login, SERVER)
-	    || !tds_set_client_charset(*login, CHARSET)
-	    || !tds_set_language(*login, "us_english")) {
-		fprintf(stderr, "tds_alloc_login() failed.\n");
-		return TDS_FAIL;
-	}
+	tds_set_passwd(*login, PASSWORD);
+	tds_set_user(*login, USER);
+	tds_set_app(*login, appname);
+	tds_set_host(*login, "myhost");
+	tds_set_library(*login, "TDS-Library");
+	tds_set_server(*login, SERVER);
+	tds_set_client_charset(*login, CHARSET);
+	tds_set_language(*login, "us_english");
 
 	if (verbose) {
 		fprintf(stdout, "Connecting to database\n");

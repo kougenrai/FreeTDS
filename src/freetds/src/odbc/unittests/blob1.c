@@ -5,6 +5,9 @@
 #include <ctype.h>
 #include <assert.h>
 
+static char software_version[] = "$Id: blob1.c,v 1.24 2011-07-12 10:16:59 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
+
 #define NBYTES 10000u
 
 static int failed = 0;
@@ -296,7 +299,7 @@ main(int argc, char **argv)
 		while (RetCode == SQL_NEED_DATA) {
 			char *p;
 
-			RetCode = CHKParamData((SQLPOINTER *) & p, "SINe");
+			RetCode = CHKParamData((SQLPOINTER) & p, "SINe");
 			printf(">> SQLParamData: ptr = %p  RetCode = %d\n", (void *) p, RetCode);
 			if (RetCode == SQL_NEED_DATA) {
 				for (t = test_infos; t < test_infos+num_tests && t->buf != p; ++t)

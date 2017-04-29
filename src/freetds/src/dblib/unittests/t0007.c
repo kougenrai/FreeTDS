@@ -5,6 +5,9 @@
 
 #include "common.h"
 
+static char software_version[] = "$Id: t0007.c,v 1.23 2010-12-30 18:54:08 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
+
 static void
 create_tables(DBPROCESS * dbproc, int rows_to_add)
 {
@@ -170,7 +173,7 @@ main(int argc, char **argv)
 			fprintf(stderr, "Failed, line %d.  Expected bin lenght to be %d, was %d\n", __LINE__, (int) sizeof(testint), (int) testvbin.len);
 			abort();
 		}
-		memcpy(&testint, testvbin.array, sizeof(testint));
+		testint = *((DBINT*) testvbin.array);
 		if (testint != i) {
 			fprintf(stderr, "Failed, line %d.  Expected i to be %d, was %d (0x%x)\n", __LINE__, i, (int) testint, (int) testint);
 			abort();

@@ -65,6 +65,8 @@
 #include <freetds/string.h>
 #include "replacements.h"
 
+TDS_RCSID(var, "$Id: gssapi.c,v 1.25 2011-11-07 09:56:24 freddy77 Exp $");
+
 /**
  * \ingroup libtds
  * \defgroup auth Authentication
@@ -130,7 +132,7 @@ tds_gss_handle_next(TDSSOCKET * tds, struct tds_authentication * auth, size_t le
 	}
 
 	recv_tok.length = len;
-	recv_tok.value = tds_new(char, len);
+	recv_tok.value = (char* ) malloc(len);
 	if (!recv_tok.value)
 		return TDS_FAIL;
 	tds_get_n(tds, recv_tok.value, len);
@@ -174,15 +176,11 @@ tds_gss_get_auth(TDSSOCKET * tds)
 	static gss_OID_desc nt_principal = { 10, (void*) "\x2a\x86\x48\x86\xf7\x12\x01\x02\x02\x01" };
 	const char *server_name;
 	/* Storage for getaddrinfo calls */
-	struct addrinfo *addrs = NULL;
+	struct tds_addrinfo *addrs = NULL;
 
-	struct tds_gss_auth *auth;
+	struct tds_gss_auth *auth = (struct tds_gss_auth *) calloc(1, sizeof(struct tds_gss_auth));
 
-	if (!tds->login)
-		return NULL;
-
-	auth = tds_new0(struct tds_gss_auth, 1);
-	if (!auth)
+	if (!auth || !tds->login)
 		return NULL;
 
 	auth->tds_auth.free = tds_gss_free;
@@ -192,12 +190,11 @@ tds_gss_get_auth(TDSSOCKET * tds)
 
 	server_name = tds_dstr_cstr(&tds->login->server_host_name);
 	if (strchr(server_name, '.') == NULL) {
-		struct addrinfo hints;
+		struct tds_addrinfo hints;
 		memset(&hints, 0, sizeof(hints));
 		hints.ai_family = AF_UNSPEC;
-		hints.ai_socktype = SOCK_STREAM;
 		hints.ai_flags = AI_V4MAPPED|AI_ADDRCONFIG|AI_CANONNAME|AI_FQDN;
-		if (!getaddrinfo(server_name, NULL, &hints, &addrs) && addrs->ai_canonname
+		if (!tds_getaddrinfo(server_name, NULL, &hints, &addrs) && addrs->ai_canonname
 		    && strchr(addrs->ai_canonname, '.') != NULL)
 			server_name = addrs->ai_canonname;
 	}
@@ -213,7 +210,7 @@ tds_gss_get_auth(TDSSOCKET * tds)
 			auth->sname = NULL;
 	}
 	if (addrs)
-		freeaddrinfo(addrs);
+		tds_freeaddrinfo(addrs);
 	if (auth->sname == NULL) {
 		tds_gss_free(tds->conn, (TDSAUTHENTICATION *) auth);
 		return NULL;

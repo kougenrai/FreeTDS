@@ -36,7 +36,7 @@
 #include <freetds/iconv.h>
 #include <freetds/string.h>
 
-TDS_INT
+static TDS_INT
 convert_datetime2server(int bindtype, const void *src, TDS_DATETIMEALL * dta)
 {
 	struct tm src_tm;
@@ -114,7 +114,7 @@ static char*
 odbc_wstr2str(TDS_STMT * stmt, const char *src, int* len)
 {
 	int srclen = (*len) / sizeof(SQLWCHAR);
-	char *out = tds_new(char, srclen + 1), *p;
+	char *out = (char *) malloc(srclen + 1), *p;
 	const SQLWCHAR *wp = (const SQLWCHAR *) src;
 
 	if (!out) {
@@ -158,8 +158,7 @@ odbc_sql2tds(TDS_STMT * stmt, const struct _drecord *drec_ipd, const struct _dre
 {
 	TDS_DBC * dbc = stmt->dbc;
 	TDSCONNECTION * conn = dbc->tds_socket->conn;
-	TDS_SERVER_TYPE dest_type;
-	int src_type, sql_src_type, res;
+	int dest_type, src_type, sql_src_type, res;
 	CONV_RESULT ores;
 	TDSBLOB *blob;
 	char *src, *converted_src;
@@ -176,7 +175,7 @@ odbc_sql2tds(TDS_STMT * stmt, const struct _drecord *drec_ipd, const struct _dre
 
 	/* what type to convert ? */
 	dest_type = odbc_sql_to_server_type(conn, drec_ipd->sql_desc_concise_type, drec_ipd->sql_desc_unsigned);
-	if (dest_type == TDS_INVALID_TYPE) {
+	if (!dest_type) {
 		odbc_errs_add(&stmt->errs, "07006", NULL);	/* Restricted data type attribute violation */
 		return SQL_ERROR;
 	}
@@ -187,25 +186,28 @@ odbc_sql2tds(TDS_STMT * stmt, const struct _drecord *drec_ipd, const struct _dre
 	if (sql_src_type == SQL_C_DEFAULT)
 		sql_src_type = odbc_sql_to_c_type_default(drec_ipd->sql_desc_concise_type);
 
-	tds_set_param_type(conn, curcol, dest_type);
-
 	/* TODO what happen for unicode types ?? */
-	if (is_char_type(dest_type)) {
+	if (is_char_type(dest_type) && sql_src_type == SQL_C_WCHAR) {
 		TDSICONV *conv = conn->char_convs[is_unicode_type(dest_type) ? client2ucs2 : client2server_chardata];
 
-		/* use binary format for binary to char */
-		if (sql_src_type == SQL_C_BINARY) {
-			curcol->char_conv = NULL;
-		} else if (sql_src_type == SQL_C_WCHAR) {
-			curcol->char_conv = tds_iconv_get(conn, odbc_get_wide_name(conn), conv->to.charset.name);
-			memcpy(curcol->column_collation, conn->collation, sizeof(conn->collation));
-		} else {
+		tds_set_param_type(conn, curcol, dest_type);
+
+                curcol->char_conv = tds_iconv_get(conn, odbc_get_wide_name(conn), conv->to.charset.name);
+		memcpy(curcol->column_collation, conn->collation, sizeof(conn->collation));
+	} else {
 #ifdef ENABLE_ODBC_WIDE
-			curcol->char_conv = tds_iconv_get(conn, tds_dstr_cstr(&dbc->original_charset), conv->to.charset.name);
+		TDSICONV *conv = conn->char_convs[is_unicode_type(dest_type) ? client2ucs2 : client2server_chardata];
+
+		tds_set_param_type(conn, curcol, dest_type);
+		/* use binary format for binary to char */
+		if (is_char_type(dest_type))
+			curcol->char_conv = sql_src_type == SQL_C_BINARY ? NULL : tds_iconv_get(conn, tds_dstr_cstr(&dbc->original_charset), conv->to.charset.name);
 #else
+		tds_set_param_type(conn, curcol, dest_type);
+		/* use binary format for binary to char */
+		if (sql_src_type == SQL_C_BINARY && is_char_type(dest_type))
 			curcol->char_conv = NULL;
 #endif
-		}
 	}
 	if (is_numeric_type(curcol->column_type)) {
 		curcol->column_prec = drec_ipd->sql_desc_precision;
@@ -254,7 +256,7 @@ odbc_sql2tds(TDS_STMT * stmt, const struct _drecord *drec_ipd, const struct _dre
 	if (!compute_row)
 		return SQL_SUCCESS;
 
-	src = (char *) drec_apd->sql_desc_data_ptr;
+	src = drec_apd->sql_desc_data_ptr;
 	if (src && n_row) {
 		SQLLEN len;
 		if (axd->header.sql_desc_bind_type != SQL_BIND_BY_COLUMN) {
@@ -343,27 +345,37 @@ odbc_sql2tds(TDS_STMT * stmt, const struct _drecord *drec_ipd, const struct _dre
 		}
 	}
 
-	if (is_char_type(dest_type) && !need_data
-	    && (sql_src_type == SQL_C_CHAR || sql_src_type == SQL_C_WCHAR || sql_src_type == SQL_C_BINARY)) {
-		if (curcol->column_data && curcol->column_data_free)
-			curcol->column_data_free(curcol);
-		curcol->column_data_free = NULL;
-		if (is_blob_col(curcol)) {
-			/* trick to set blob without freeing it, _odbc_blob_free does not free TDSBLOB->textvalue */
-			TDSBLOB *blob = tds_new0(TDSBLOB, 1);
-			if (!blob) {
-				odbc_errs_add(&stmt->errs, "HY001", NULL);
-				return SQL_ERROR;
+	switch (dest_type) {
+	case SYBCHAR:
+	case SYBVARCHAR:
+	case XSYBCHAR:
+	case XSYBVARCHAR:
+	case XSYBNVARCHAR:
+	case XSYBNCHAR:
+	case SYBNVARCHAR:
+	case SYBNTEXT:
+	case SYBTEXT:
+		if (!need_data && (sql_src_type == SQL_C_CHAR || sql_src_type == SQL_C_WCHAR || sql_src_type == SQL_C_BINARY)) {
+			if (curcol->column_data && curcol->column_data_free)
+				curcol->column_data_free(curcol);
+			curcol->column_data_free = NULL;
+			if (is_blob_col(curcol)) {
+				/* trick to set blob without freeing it, _odbc_blob_free does not free TDSBLOB->textvalue */
+				TDSBLOB *blob = (TDSBLOB *) calloc(1, sizeof(TDSBLOB));
+				if (!blob) {
+					odbc_errs_add(&stmt->errs, "HY001", NULL);
+					return SQL_ERROR;
+				}
+				blob->textvalue = src;
+				curcol->column_data = (TDS_UCHAR*) blob;
+				curcol->column_data_free = _odbc_blob_free;
+			} else {
+				curcol->column_data = (TDS_UCHAR*) src;
 			}
-			blob->textvalue = src;
-			curcol->column_data = (TDS_UCHAR*) blob;
-			curcol->column_data_free = _odbc_blob_free;
-		} else {
-			curcol->column_data = (TDS_UCHAR*) src;
+			curcol->column_size = len;
+			curcol->column_cur_size = len;
+			return SQL_SUCCESS;
 		}
-		curcol->column_size = len;
-		curcol->column_cur_size = len;
-		return SQL_SUCCESS;
 	}
 
 	/* allocate given space */
@@ -483,8 +495,6 @@ odbc_sql2tds(TDS_STMT * stmt, const struct _drecord *drec_ipd, const struct _dre
 	case SYBMSDATE:
 	case SYBMSDATETIME2:
 	case SYBMSDATETIMEOFFSET:
-	case SYB5BIGTIME:
-	case SYB5BIGDATETIME:
 		res = tds_convert(dbc->env->tds_ctx, src_type, src, len, dest_type, (CONV_RESULT*) dest);
 		break;
 	default:

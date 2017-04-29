@@ -20,8 +20,6 @@
  */
 #include <config.h>
 
-#ifndef HAVE_NETTLE
-
 #if HAVE_STRING_H
 #include <string.h>
 #endif /* HAVE_STRING_H */
@@ -29,6 +27,8 @@
 #include <freetds/tds.h>
 #include <freetds/bytes.h>
 #include "md5.h"
+
+TDS_RCSID(var, "$Id: md5.c,v 1.4 2011-05-16 08:51:40 freddy77 Exp $");
 
 #undef word32
 #define word32 TDS_UINT
@@ -47,8 +47,6 @@ static void byteReverse(unsigned char *buf, unsigned longs)
     } while (--longs);
 }
 #endif
-
-static void MD5Transform(word32 buf[4], word32 const in[16]);
 
 /*
  * Start MD5 accumulation.  Set bit count to 0 and buffer to mysterious
@@ -172,7 +170,7 @@ void MD5Final(struct MD5Context *ctx, unsigned char* digest)
  * reflect the addition of 16 longwords of new data.  MD5Update blocks
  * the data and converts bytes into longwords for this routine.
  */
-static void MD5Transform(word32 buf[4], word32 const in[16])
+void MD5Transform(word32 buf[4], word32 const in[16])
 {
     register word32 a, b, c, d;
 
@@ -255,4 +253,3 @@ static void MD5Transform(word32 buf[4], word32 const in[16])
     buf[3] += d;
 }
 
-#endif

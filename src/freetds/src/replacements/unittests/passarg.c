@@ -41,7 +41,7 @@ int main(void)
 	char *pwd = strdup("password");
 	char *p;
 
-	p = tds_getpassarg(pwd);
+	p = getpassarg(pwd);
 	assert(p);
 	assert(strcmp(pwd, "********") == 0);
 	assert(strcmp(p, "password") == 0);
@@ -56,7 +56,7 @@ int main(void)
 	f = freopen("passarg.in", "r", stdin);
 	assert(f);
 
-	p = tds_getpassarg("-");
+	p = getpassarg("-");
 	assert(p);
 	assert(strcmp(p, "line1pwd") == 0);
 	free(p);

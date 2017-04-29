@@ -8,6 +8,9 @@
 !define PRODUCT_WEB_SITE "http://www.freetds.org"
 !define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\{fef6e1f0-ef60-43d2-80a4-bfb774df706c}"
 !define PRODUCT_UNINST_ROOT_KEY "HKLM"
+!define ODBC_DRIVER_NAME "FreeTDS ODBC Driver"
+!define ODBC_REGKEY "SOFTWARE\ODBC\ODBCINST.INI\${ODBC_DRIVER_NAME}"
+!define ODBC_ROOT_KEY "HKLM"
 
 SetCompressor lzma
 
@@ -53,7 +56,17 @@ Section "MainSection" SEC01
   File ".\FreeTDS.dll"
 
   ; install driver
-  ExecWait '"$SYSDIR\rundll32.exe" "$SYSDIR\FreeTDS.dll" DllRegisterServer'
+  WriteRegStr ${ODBC_ROOT_KEY} "${ODBC_REGKEY}" "Driver" "$SYSDIR\FreeTDS.dll"
+  WriteRegStr ${ODBC_ROOT_KEY} "${ODBC_REGKEY}" "APILevel" "2"
+  WriteRegStr ${ODBC_ROOT_KEY} "${ODBC_REGKEY}" "ConnectFunctions" "YYY"
+  WriteRegStr ${ODBC_ROOT_KEY} "${ODBC_REGKEY}" "CPTimeout" "60"
+  WriteRegStr ${ODBC_ROOT_KEY} "${ODBC_REGKEY}" "DriverODBCVer" "02.50"
+  WriteRegStr ${ODBC_ROOT_KEY} "${ODBC_REGKEY}" "FileUsage" "0"
+  WriteRegStr ${ODBC_ROOT_KEY} "${ODBC_REGKEY}" "Setup" "$SYSDIR\FreeTDS.dll"
+  WriteRegStr ${ODBC_ROOT_KEY} "${ODBC_REGKEY}" "SQLLevel" "1"
+
+  ; tell that our driver is installed
+  WriteRegStr "HKLM" "SOFTWARE\ODBC\ODBCINST.INI\ODBC Drivers" "${ODBC_DRIVER_NAME}" "Installed"
 SectionEnd
 
 Section -Post
@@ -78,7 +91,8 @@ Function un.onInit
 FunctionEnd
 
 Section Uninstall
-  ExecWait '"$SYSDIR\rundll32.exe" "$SYSDIR\FreeTDS.dll" DllUnregisterServer'
+  DeleteRegValue "HKLM" "SOFTWARE\ODBC\ODBCINST.INI\ODBC Drivers" "${ODBC_DRIVER_NAME}"
+  DeleteRegKey ${ODBC_ROOT_KEY} "${ODBC_REGKEY}"
 
   Delete "$INSTDIR\uninst.exe"
   Delete "$SYSDIR\FreeTDS.dll"

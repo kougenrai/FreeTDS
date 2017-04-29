@@ -41,11 +41,9 @@ desc_alloc(SQLHANDLE parent, int desc_type, int alloc_type)
 {
 	TDS_DESC *desc;
 
-	desc = tds_new0(TDS_DESC, 1);
-	if (!desc || tds_mutex_init(&desc->mtx)) {
-		free(desc);
+	desc = (TDS_DESC *) calloc(1, sizeof(TDS_DESC));
+	if (!desc || tds_mutex_init(&desc->mtx))
 		return NULL;
-	}
 
 	/* set default header values */
 	desc->htype = SQL_HANDLE_DESC;
@@ -200,6 +198,7 @@ desc_free(TDS_DESC * desc)
 	if (desc) {
 		desc_free_records(desc);
 		odbc_errs_reset(&desc->errs);
+		tds_mutex_unlock(&desc->mtx);
 		tds_mutex_free(&desc->mtx);
 		free(desc);
 	}

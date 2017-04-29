@@ -1,6 +1,5 @@
 /* FreeTDS - Library of routines accessing Sybase and Microsoft databases
  * Copyright (C) 1998-1999  Brian Bruns
- * Copyright (C) 2015  Frediano Ziglio
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -18,28 +17,18 @@
  * Boston, MA 02111-1307, USA.
  */
 
-/**
- * This test exercise manually conversions from types.
- * Does not require any connection.
- */
-
 #include "common.h"
 #include <freetds/convert.h>
 
 static TDSCONTEXT ctx;
 
 static void
-test0(const char *src, int len, int midtype, int dsttype, const char *result, int line)
+test2(const char *src, int len, int midtype, int dsttype, const char *result, int line)
 {
 	int i, res;
 	char buf[256];
 	CONV_RESULT cr, cr_mid;
 	int srctype = SYBVARCHAR;
-	char *copy;
-
-	copy = tds_new(char, len);
-	memcpy(copy, src, len);
-	src = copy;
 
 	if (midtype) {
 		res = tds_convert(&ctx, SYBVARCHAR, src, len, midtype, &cr_mid);
@@ -76,8 +65,6 @@ test0(const char *src, int len, int midtype, int dsttype, const char *result, in
 		case SYBINT8:
 			sprintf(buf, "0x%08x%08x", (unsigned int) ((cr.bi >> 32) & 0xfffffffflu), (unsigned int) (cr.bi & 0xfffffffflu));
 			break;
-		case SYB5BIGTIME:
-		case SYB5BIGDATETIME:
 		case SYBUINT8:
 			sprintf(buf, "0x%08x%08x", (unsigned int) ((cr.ubi >> 32) & 0xfffffffflu), (unsigned int) (cr.ubi & 0xfffffffflu));
 			break;
@@ -95,18 +82,8 @@ test0(const char *src, int len, int midtype, int dsttype, const char *result, in
 				sprintf(strchr(buf, 0), " %02X", (TDS_UCHAR) cr.ib[i]);
 			free(cr.ib);
 			break;
-		case SYBCHAR:
-			sprintf(buf, "len=%d %s", res, cr.c);
-			free(cr.c);
-			break;
 		case SYBDATETIME:
 			sprintf(buf, "%ld %ld", (long int) cr.dt.dtdays, (long int) cr.dt.dttime);
-			break;
-		case SYBDATE:
-			sprintf(buf, "%ld", (long int) cr.date);
-			break;
-		case SYBTIME:
-			sprintf(buf, "%ld", (long int) cr.time);
 			break;
 		}
 	}
@@ -115,11 +92,23 @@ test0(const char *src, int len, int midtype, int dsttype, const char *result, in
 		fprintf(stderr, "Expected '%s' got '%s' at line %d\n", result, buf, line);
 		exit(1);
 	}
-	free(copy);
 }
 
-#define test(s,d,r)    test0(s,strlen(s),0,d,r,__LINE__)
-#define test2(s,m,d,r) test0(s,strlen(s),m,d,r,__LINE__)
+static void
+test0(const char *src, int len, int dsttype, const char *result, int line)
+{
+	test2(src, len, 0, dsttype, result, line);
+}
+
+static void
+test(const char *src, int dsttype, const char *result, int line)
+{
+	test0(src, strlen(src), dsttype, result, line);
+}
+
+#define test2(s,m,d,r) test2(s,strlen(s),m,d,r,__LINE__)
+#define test0(s,l,d,r) test0(s,l,d,r,__LINE__)
+#define test(s,d,r) test(s,d,r,__LINE__)
 
 static int
 int_types[] = {
@@ -170,13 +159,6 @@ main(int argc, char **argv)
 		big_endian = 0;
 
 	memset(&ctx, 0, sizeof(ctx));
-
-	if ((ctx.locale = tds_get_locale()) == NULL)
-		return 1;
-
-	/* date */
-	free(ctx.locale->date_fmt);
-	ctx.locale->date_fmt = strdup("%Y-%m-%d %H:%M:%S.%z");
 
 	/* test some conversion */
 	printf("some checks...\n");
@@ -242,8 +224,6 @@ main(int argc, char **argv)
 	test("18446744073709551618", SYBUINT8, "error");
 	test("18446744073709551619", SYBUINT8, "error");
 	test("18446744073709551620", SYBUINT8, "error");
-	test("20496382304121724025", SYBUINT8, "error");
-	test("20496382308118429681", SYBUINT8, "error");
 	test("-1", SYBUINT8, "error");
 	test("-9223372036854775809", SYBINT8, "error");
 	test("2147483647", SYBINT4, "2147483647");
@@ -285,9 +265,9 @@ main(int argc, char **argv)
 	test("59248632876323876761", SYBINT8, "error");
 	test("12248632876323876761", SYBINT8, "error");
 
-	/* money */
-	test2("1234.11111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
-		SYBMONEY, SYBCHAR, "len=7 1234.11");
+	/* test not terminated string */
+	test0("1234", 2, SYBINT4, "12");
+	test0("123456", 4, SYBINT8, "0x00000000000004d2");
 
 	/* some test for unique */
 	printf("unique type...\n");
@@ -319,35 +299,6 @@ main(int argc, char **argv)
 	test("02Jan2006", SYBDATETIME, "38717 0");
 	test("20060102", SYBDATETIME, "38717 0");
 	test("060102", SYBDATETIME, "38717 0");
-
-	test("2006-01-02", SYBDATE, "38717");
-	test("12:34:56.337", SYBTIME, "13588901");
-
-	test2("2006-01-02", SYBDATE, SYBDATE, "38717");
-	test2("12:34:56.337", SYBTIME, SYBTIME, "13588901");
-
-	test2("2006-01-02 12:34:56.337", SYBDATETIME, SYBDATE, "38717");
-	test2("2006-01-02 12:34:56.337", SYBDATETIME, SYBTIME, "13588901");
-
-	test("2006-01-02 12:34:56.337321", SYB5BIGTIME, "0x0000000a8bdf41a9");
-	test("2006-01-23 12:34:56.337321", SYB5BIGDATETIME, "0x00e0e7c784d661a9");
-	test("2006-01-02 12:34:56.337321", SYB5BIGDATETIME, "0x00e0e621122b81a9");
-
-	test2("2006-01-02 12:34:56.337765", SYB5BIGDATETIME, SYBCHAR, "len=26 2006-01-02 12:34:56.337765");
-	test("2006-01-02 12:34:56.337765", SYB5BIGDATETIME, "0x00e0e621122b8365");
-
-	test2("2006-01-02 12:34:56.337", SYBMSDATETIME2, SYBDATE, "38717");
-	test2("2006-01-02 12:34:56.337", SYBMSDATETIME2, SYBTIME, "13588901");
-
-	test2("2006-01-02 12:34:56.337", SYBMSDATETIME2, SYBCHAR, "len=27 2006-01-02 12:34:56.3370000");
-#if 0
-	/* FIXME should fail conversion ?? */
-	test2("2006-01-02", SYBDATE, SYBTIME, "0");
-	test2("12:34:56.337", SYBTIME, SYBDATE, "0");
-#endif
-
-	test2("2006-01-02", SYBDATE, SYBCHAR, "len=23 2006-01-02 00:00:00.000");
-	test2("12:34:56.337", SYBTIME, SYBCHAR, "len=23 1900-01-01 12:34:56.337");
 
 	test2("123", SYBINT1, SYBBINARY, "len=1 7B");
 	if (big_endian) {
@@ -405,8 +356,6 @@ main(int argc, char **argv)
 			return 1;
 		}
 	}
-
-	tds_free_locale(ctx.locale);
 
 	return 0;
 }

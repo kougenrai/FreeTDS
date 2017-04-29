@@ -5,8 +5,8 @@ TESTS		=	t0001$(EXEEXT) t0002$(EXEEXT) t0003$(EXEEXT)\
 			convert$(EXEEXT) dataread$(EXEEXT) utf8_1$(EXEEXT)\
 			utf8_2$(EXEEXT) utf8_3$(EXEEXT) numeric$(EXEEXT) \
 			iconv_fread$(EXEEXT) toodynamic$(EXEEXT) \
-			readconf$(EXEEXT) charconv$(EXEEXT) \
-			nulls$(EXEEXT) corrupt$(EXEEXT)
+			$(CHALLENGE_TEST) readconf$(EXEEXT) charconv$(EXEEXT) \
+			nulls$(EXEEXT)
 
 # flags test commented, not necessary for 0.62
 # TODO add flags test again when needed
@@ -37,12 +37,13 @@ iconv_fread_SOURCES	= iconv_fread.c
 charconv_SOURCES	= charconv.c
 toodynamic_SOURCES	= toodynamic.c common.c common.h
 nulls_SOURCES	= nulls.c common.c common.h
-if !HAVE_SSPI
-TESTS += challenge$(EXEEXT)
+if HAVE_SSPI
+CHALLENGE_TEST =
+else
+CHALLENGE_TEST = challenge$(EXEEXT)
 challenge_SOURCES	= challenge.c
 endif
 readconf_SOURCES	= readconf.c
-corrupt_SOURCES	=	corrupt.c common.c common.h
 
 AM_CPPFLAGS	=	-I$(top_srcdir)/include -I$(srcdir)/.. -I../ -DFREETDS_TOPDIR=\"$(top_srcdir)\"
 if MINGW32
@@ -50,7 +51,7 @@ AM_LDFLAGS	=	-no-fast-install
 else
 AM_LDFLAGS	=	-no-install -L../.libs -R $(abs_builddir)/../.libs
 endif
-LIBS		=	../libtds.la ../../replacements/libreplacements.la $(LTLIBICONV) $(NETWORK_LIBS)
+LIBS		=	../libtds.la ../../replacements/libreplacements.la $(LTLIBICONV) @NETWORK_LIBS@
 CLEANFILES	=	tdsdump.out
 EXTRA_DIST	=	challenge.c CMakeLists.txt readconf.in
 

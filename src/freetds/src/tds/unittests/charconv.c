@@ -58,8 +58,8 @@ convert(TDSSOCKET *tds, TDSICONV *conv, TDS_ICONV_DIRECTION direction,
 	const char *from, size_t from_len, char *dest, size_t *dest_len)
 {
 	/* copy to make valgrind test fail on memory problems */
-	char *in = tds_new(char, from_len);
-	char *out = tds_new(char, *dest_len);
+	char *in = malloc(from_len);
+	char *out = malloc(*dest_len);
 	int res;
 	TDSSTATICINSTREAM r;
 	TDSSTATICOUTSTREAM w;
@@ -84,8 +84,7 @@ enum Odd {
 	ODD_NONE = 0,
 	ODD_NORMAL,
 	ODD_INVALID,
-	ODD_INCOMPLETE,
-	ODD_NUM_VALUES
+	ODD_INCOMPLETE
 };
 
 static const char *odd_names[] = {
@@ -332,10 +331,9 @@ main(int argc, char **argv)
 		return 1;
 	}
 
-	for (i = 0; i < ODD_NUM_VALUES*3*2; ++i) {
+	for (i = 0; i < 4*3*2; ++i) {
 		int n = i;
-		enum Odd odd_type = (enum Odd) (n % ODD_NUM_VALUES);
-		n /= ODD_NUM_VALUES;
+		int odd_type = n % 4; n /= 4;
 		pos_type = n % 3; n /= 3;
 
 		test(n ? tds : NULL, odd_type);

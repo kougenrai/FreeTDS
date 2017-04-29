@@ -1,20 +1,19 @@
-SUBDIRS	     = replacements tds ctlib dblib
-DIST_SUBDIRS = $(SUBDIRS)
-
-if ODBC
-SUBDIRS	+= odbc
-else
-DIST_SUBDIRS += odbc
+# $Id: Makefile.am,v 1.8 2004-03-13 19:41:02 jklowden Exp $
+if INCAPPS
+APPS = apps
 endif
-
 if INCPOOL
-SUBDIRS += server pool
+POOL = pool
+SERVER = server
 else !INCPOOL
 if INCSERVER
-SUBDIRS += server
+SERVER = server 
 endif
 endif
-
-if INCAPPS
-SUBDIRS += apps
+if ODBC
+SUBDIRS	=	replacements tds ctlib dblib odbc $(APPS) $(SERVER) $(POOL)
+DIST_SUBDIRS = $(SUBDIRS)
+else
+SUBDIRS	=	replacements tds ctlib dblib $(APPS) $(SERVER) $(POOL)
+DIST_SUBDIRS = odbc $(SUBDIRS)
 endif

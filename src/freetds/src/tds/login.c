@@ -1,6 +1,6 @@
 /* FreeTDS - Library of routines accessing Sybase and Microsoft databases
  * Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005  Brian Bruns
- * Copyright (C) 2005-2015  Ziglio Frediano
+ * Copyright (C) 2005-2010  Ziglio Frediano
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -44,17 +44,13 @@
 #include <freetds/tds.h>
 #include <freetds/iconv.h>
 #include <freetds/string.h>
-#include <freetds/bytes.h>
 #include <freetds/tls.h>
 #include <freetds/stream.h>
-#include <freetds/checks.h>
 #include "replacements.h"
 
 static TDSRET tds_send_login(TDSSOCKET * tds, TDSLOGIN * login);
 static TDSRET tds71_do_login(TDSSOCKET * tds, TDSLOGIN * login);
 static TDSRET tds7_send_login(TDSSOCKET * tds, TDSLOGIN * login);
-static void tds7_crypt_pass(const unsigned char *clear_pass,
-			    size_t len, unsigned char *crypt_pass);
 
 void
 tds_set_version(TDSLOGIN * tds_login, TDS_TINYINT major_ver, TDS_TINYINT minor_ver)
@@ -74,14 +70,13 @@ tds_set_port(TDSLOGIN * tds_login, int port)
 	tds_login->port = port;
 }
 
-bool
+void
 tds_set_passwd(TDSLOGIN * tds_login, const char *password)
 {
 	if (password) {
 		tds_dstr_zero(&tds_login->password);
-		return !!tds_dstr_copy(&tds_login->password, password);
+		tds_dstr_copy(&tds_login->password, password);
 	}
-	return true;
 }
 void
 tds_set_bulk(TDSLOGIN * tds_login, TDS_TINYINT enabled)
@@ -89,22 +84,22 @@ tds_set_bulk(TDSLOGIN * tds_login, TDS_TINYINT enabled)
 	tds_login->bulk_copy = enabled ? 0 : 1;
 }
 
-bool
+void
 tds_set_user(TDSLOGIN * tds_login, const char *username)
 {
-	return !!tds_dstr_copy(&tds_login->user_name, username);
+	tds_dstr_copy(&tds_login->user_name, username);
 }
 
-bool
+void
 tds_set_host(TDSLOGIN * tds_login, const char *hostname)
 {
-	return !!tds_dstr_copy(&tds_login->client_host_name, hostname);
+	tds_dstr_copy(&tds_login->client_host_name, hostname);
 }
 
-bool
+void
 tds_set_app(TDSLOGIN * tds_login, const char *application)
 {
-	return !!tds_dstr_copy(&tds_login->app_name, application);
+	tds_dstr_copy(&tds_login->app_name, application);
 }
 
 /**
@@ -118,7 +113,7 @@ tds_set_app(TDSLOGIN * tds_login, const char *application)
  * \param server	the servername, or NULL, or a zero-length string
  * \todo open the log file earlier, so these messages can be seen.  
  */
-bool
+void
 tds_set_server(TDSLOGIN * tds_login, const char *server)
 {
 #if 0
@@ -141,26 +136,25 @@ tds_set_server(TDSLOGIN * tds_login, const char *server)
 	}
 #endif
 	if (server)
-		return !!tds_dstr_copy(&tds_login->server_name, server);
-	return true;
+		tds_dstr_copy(&tds_login->server_name, server);
 }
 
-bool
+void
 tds_set_library(TDSLOGIN * tds_login, const char *library)
 {
-	return !!tds_dstr_copy(&tds_login->library, library);
+	tds_dstr_copy(&tds_login->library, library);
 }
 
-bool
+void
 tds_set_client_charset(TDSLOGIN * tds_login, const char *charset)
 {
-	return !!tds_dstr_copy(&tds_login->client_charset, charset);
+	tds_dstr_copy(&tds_login->client_charset, charset);
 }
 
-bool
+void
 tds_set_language(TDSLOGIN * tds_login, const char *language)
 {
-	return !!tds_dstr_copy(&tds_login->language, language);
+	tds_dstr_copy(&tds_login->language, language);
 }
 
 struct tds_save_msg
@@ -297,51 +291,6 @@ free_save_context(TDSSAVECONTEXT *ctx)
 }
 
 /**
- * Retrieve and set @@spid
- * \tds
- */
-static TDSRET
-tds_set_spid(TDSSOCKET * tds)
-{
-	TDS_INT result_type;
-	TDS_INT done_flags;
-	TDSRET rc;
-	TDSCOLUMN *curcol;
-
-	CHECK_TDS_EXTRA(tds);
-
-	while ((rc = tds_process_tokens(tds, &result_type, &done_flags, TDS_RETURN_ROW|TDS_RETURN_DONE)) == TDS_SUCCESS) {
-
-		switch (result_type) {
-		case TDS_ROW_RESULT:
-			if (tds->res_info->num_cols != 1)
-				break;
-			curcol = tds->res_info->columns[0];
-			switch (tds_get_conversion_type(curcol->column_type, curcol->column_size)) {
-			case SYBINT2:
-				tds->conn->spid = *((TDS_USMALLINT *) curcol->column_data);
-				break;
-			case SYBINT4:
-				tds->conn->spid = *((TDS_UINT *) curcol->column_data);
-				break;
-			default:
-				return TDS_FAIL;
-			}
-			break;
-
-		case TDS_DONE_RESULT:
-			if ((done_flags & TDS_DONE_ERROR) != 0)
-				return TDS_FAIL;
-			break;
-		}
-	}
-	if (rc == TDS_NO_MORE_RESULTS)
-		rc = TDS_SUCCESS;
-
-	return rc;
-}
-
-/**
  * Do a connection to socket
  * @param tds connection structure. This should be a non-connected connection.
  * @return TDS_FAIL or TDS_SUCCESS if a connection was made to the server's port.
@@ -359,7 +308,7 @@ tds_connect(TDSSOCKET * tds, TDSLOGIN * login, int *p_oserr)
 	int erc = -TDSEFCON;
 	int connect_timeout = 0;
 	int db_selected = 0;
-	struct addrinfo *addrs;
+	struct tds_addrinfo *addrs;
 	int orig_port;
 
 	/*
@@ -508,13 +457,6 @@ tds_connect(TDSSOCKET * tds, TDSLOGIN * login, int *p_oserr)
 	 */
 		
 	tds_set_state(tds, TDS_IDLE);
-	tds->conn->spid = -1;
-
-	/* discard possible previous authentication */
-	if (tds->conn->authentication) {
-		tds->conn->authentication->free(tds->conn, tds->conn->authentication);
-		tds->conn->authentication = NULL;
-	}
 
 	if (IS_TDS71_PLUS(tds->conn)) {
 		erc = tds71_do_login(tds, login);
@@ -543,21 +485,17 @@ tds_connect(TDSSOCKET * tds, TDSLOGIN * login, int *p_oserr)
 	}
 #endif
 
-	if (login->text_size || (!db_selected && !tds_dstr_isempty(&login->database))
-	    || tds->conn->spid == -1) {
+	if (login->text_size || (!db_selected && !tds_dstr_isempty(&login->database))) {
 		char *str;
 		int len;
 
-		len = 128 + tds_quote_id(tds, NULL, tds_dstr_cstr(&login->database),-1);
-		if ((str = tds_new(char, len)) == NULL)
+		len = 64 + tds_quote_id(tds, NULL, tds_dstr_cstr(&login->database),-1);
+		if ((str = (char *) malloc(len)) == NULL)
 			return TDS_FAIL;
 
 		str[0] = 0;
 		if (login->text_size) {
 			sprintf(str, "set textsize %d ", login->text_size);
-		}
-		if (tds->conn->spid == -1) {
-			strcat(str, "select @@spid ");
 		}
 		if (!db_selected && !tds_dstr_isempty(&login->database)) {
 			strcat(str, "use ");
@@ -568,10 +506,7 @@ tds_connect(TDSSOCKET * tds, TDSLOGIN * login, int *p_oserr)
 		if (TDS_FAILED(erc))
 			return erc;
 
-		if (tds->conn->spid == -1)
-			erc = tds_set_spid(tds);
-		else
-			erc = tds_process_simple_query(tds);
+		erc = tds_process_simple_query(tds);
 		if (TDS_FAILED(erc))
 			return erc;
 	}
@@ -600,10 +535,30 @@ tds_send_login(TDSSOCKET * tds, TDSLOGIN * login)
 {
 #ifdef WORDS_BIGENDIAN
 	static const unsigned char be1[] = { 0x02, 0x00, 0x06, 0x04, 0x08, 0x01 };
-	static const unsigned char be2[] = { 0x00, 12, 16 };
 #endif
 	static const unsigned char le1[] = { 0x03, 0x01, 0x06, 0x0a, 0x09, 0x01 };
+	static const unsigned char magic2[] = { 0x00, 0x00 };
+
+	static const unsigned char magic3[] = { 0x00, 0x00, 0x00 };
+
+	/* these seem to endian flags as well 13,17 on intel/alpha 12,16 on power */
+
+#ifdef WORDS_BIGENDIAN
+	static const unsigned char be2[] = { 0x00, 12, 16 };
+#endif
 	static const unsigned char le2[] = { 0x00, 13, 17 };
+
+	/* 
+	 * the former byte 0 of magic5 causes the language token and message to be 
+	 * absent from the login acknowledgement if set to 1. There must be a way 
+	 * of setting this in the client layer, but I am not aware of any thing of
+	 * the sort -- bsb 01/17/99
+	 */
+	static const unsigned char magic5[] = { 0x00, 0x00 };
+	static const unsigned char magic6[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+
+	static const unsigned char magic42[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+	static const unsigned char magic50[] = { 0x00, 0x00, 0x00, 0x00 };
 
 	/*
 	 * capabilities are now part of the tds structure.
@@ -632,19 +587,6 @@ tds_send_login(TDSSOCKET * tds, TDSLOGIN * login)
 	if (strchr(tds_dstr_cstr(&login->user_name), '\\') != NULL) {
 		tdsdump_log(TDS_DBG_ERROR, "NT login not support using TDS 4.x or 5.0\n");
 		return TDS_FAIL;
-	}
-	if (tds_dstr_isempty(&login->user_name)) {
-		tdsdump_log(TDS_DBG_ERROR, "Kerberos login not support using TDS 4.x or 5.0\n");
-		return TDS_FAIL;
-	}
-	if (login->encryption_level != TDS_ENCRYPTION_OFF) {
-		if (IS_TDS42(tds->conn)) {
-			tdsdump_log(TDS_DBG_ERROR, "Encryption not support using TDS 4.x\n");
-			return TDS_FAIL;
-		}
-		tds->conn->authentication = tds5_negotiate_get_auth(tds);
-		if (!tds->conn->authentication)
-			return TDS_FAIL;
 	}
 
 	if (IS_TDS42(tds->conn)) {
@@ -681,19 +623,17 @@ tds_send_login(TDSSOCKET * tds, TDSLOGIN * login)
 	tds_put_n(tds, le1, 6);
 #endif
 	tds_put_byte(tds, login->bulk_copy);
-	tds_put_n(tds, NULL, 2);
+	tds_put_n(tds, magic2, 2);
 	if (IS_TDS42(tds->conn)) {
 		tds_put_int(tds, 512);
 	} else {
 		tds_put_int(tds, 0);
 	}
-	tds_put_n(tds, NULL, 3);
+	tds_put_n(tds, magic3, 3);
 	tds_put_login_string(tds, tds_dstr_cstr(&login->app_name), TDS_MAXNAME);
 	tds_put_login_string(tds, lservname, TDS_MAXNAME);
 	if (IS_TDS42(tds->conn)) {
 		tds_put_login_string(tds, tds_dstr_cstr(&login->password), 255);
-	} else if (login->encryption_level) {
-		tds_put_n(tds, NULL, 256);
 	} else {
 		len = (int)tds_dstr_len(&login->password);
 		if (len > 253)
@@ -723,17 +663,9 @@ tds_send_login(TDSSOCKET * tds, TDSLOGIN * login)
 #endif
 	tds_put_login_string(tds, tds_dstr_cstr(&login->language), TDS_MAXNAME);	/* language */
 	tds_put_byte(tds, login->suppress_language);
-
-	/* oldsecure(2), should be zero, used by old software */
-	tds_put_n(tds, NULL, 2);
-	/* seclogin(1) bitmask */
-	tds_put_byte(tds, login->encryption_level ? TDS5_SEC_LOG_ENCRYPT2|TDS5_SEC_LOG_NONCE : 0);
-	/* secbulk(1)
-	 * halogin(1) type of ha login
-	 * hasessionid(6) id of session to reconnect
-	 * secspare(2) not used
-	 */
-	tds_put_n(tds, NULL, 10);
+	tds_put_n(tds, magic5, 2);
+	tds_put_byte(tds, login->encryption_level ? 1 : 0);
+	tds_put_n(tds, magic6, 10);
 
 	/* use empty charset to handle conversions on client */
 	tds_put_login_string(tds, "", TDS_MAXNAME);	/* charset */
@@ -742,19 +674,18 @@ tds_send_login(TDSSOCKET * tds, TDSLOGIN * login)
 	tds_put_byte(tds, 1);
 
 	/* network packet size */
-	if (login->block_size < 65536u && login->block_size >= 512)
+	if (login->block_size < 65536 && login->block_size > 0)
 		sprintf(blockstr, "%d", login->block_size);
 	else
 		strcpy(blockstr, "512");
 	tds_put_login_string(tds, blockstr, TDS_PKTLEN);
 
 	if (IS_TDS42(tds->conn)) {
-		tds_put_n(tds, NULL, 8);
+		tds_put_n(tds, magic42, 8);
 	} else if (IS_TDS46(tds->conn)) {
-		tds_put_n(tds, NULL, 4);
+		tds_put_n(tds, magic42, 4);
 	} else if (IS_TDS50(tds->conn)) {
-		/* just padding to 8 bytes */
-		tds_put_n(tds, NULL, 4);
+		tds_put_n(tds, magic50, 4);
 		tds_put_byte(tds, TDS_CAPABILITY_TOKEN);
 		tds_put_smallint(tds, sizeof(tds->conn->capabilities));
 		tds_put_n(tds, &tds->conn->capabilities, sizeof(tds->conn->capabilities));
@@ -774,31 +705,30 @@ tds7_send_login(TDSSOCKET * tds, TDSLOGIN * login)
 	static const unsigned char 
 		client_progver[] = {   6, 0x83, 0xf2, 0xf8 }, 
 
+		tds70Version[] = { 0x00, 0x00, 0x00, 0x70 },
+		tds71Version[] = { 0x01, 0x00, 0x00, 0x71 },
+		tds72Version[] = { 0x02, 0x00, 0x09, 0x72 },
+		tds73Version[] = { 0x03, 0x00, 0x0B, 0x73 }, 
 		connection_id[] = { 0x00, 0x00, 0x00, 0x00 }, 
-		collation[] = { 0x36, 0x04, 0x00, 0x00 };
+		time_zone[] = { 0x88, 0xff, 0xff, 0xff }, 
+		collation[] = { 0x36, 0x04, 0x00, 0x00 }, 
+		
+		sql_type_flag = 0x00, 
+		reserved_flag = 0x00;
 
-	enum {
-		tds70Version = 0x70000000,
-		tds71Version = 0x71000001,
-		tds72Version = 0x72090002,
-		tds73Version = 0x730B0003,
-		tds74Version = 0x74000004,
-	};
-	TDS_UCHAR sql_type_flag = 0x00;
-	TDS_INT time_zone = -120;
-	TDS_INT tds7version = tds70Version;
-
+	const unsigned char *ptds7version = tds70Version;
+	
 	TDS_INT block_size = 4096;
 	
 	unsigned char option_flag1 = TDS_SET_LANG_ON | TDS_USE_DB_NOTIFY | TDS_INIT_DB_FATAL;
 	unsigned char option_flag2 = login->option_flag2;
-	unsigned char option_flag3 = 0;
+	unsigned char option_flag3 = TDS_UNKNOWN_COLLATION_HANDLING;
 
 	unsigned char hwaddr[6];
 	size_t packet_size, current_pos;
 	TDSRET rc;
 
-	void *data = NULL;
+	void *data;
 	TDSDYNAMICSTREAM data_stream;
 	TDSSTATICINSTREAM input;
 
@@ -819,7 +749,7 @@ tds7_send_login(TDSSOCKET * tds, TDSLOGIN * login)
 		LIBRARY_NAME,
 		LANGUAGE,
 		DATABASE_NAME,
-		DB_FILENAME,
+		DBFILE_NAME,
 		NEW_PASSWORD,
 		NUM_DATA_FIELDS
 	};
@@ -830,7 +760,19 @@ tds7_send_login(TDSSOCKET * tds, TDSLOGIN * login)
 
 	tds->out_flag = TDS7_LOGIN;
 
+	/* discard possible previous authentication */
+	if (tds->conn->authentication) {
+		tds->conn->authentication->free(tds->conn, tds->conn->authentication);
+		tds->conn->authentication = NULL;
+	}
+
 	current_pos = packet_size = IS_TDS72_PLUS(tds->conn) ? 86 + 8 : 86;	/* ? */
+
+	/* initialize ouput buffer for strings */
+	data = NULL;
+	rc = tds_dynamic_stream_init(&data_stream, &data, 0);
+	if (TDS_FAILED(rc))
+		return rc;
 
 	/* check ntlm */
 #ifdef HAVE_SSPI
@@ -838,7 +780,7 @@ tds7_send_login(TDSSOCKET * tds, TDSLOGIN * login)
 		tdsdump_log(TDS_DBG_INFO2, "using SSPI authentication for '%s' account\n", user_name);
 		tds->conn->authentication = tds_sspi_get_auth(tds);
 		if (!tds->conn->authentication)
-			return TDS_FAIL;
+			goto cleanup;
 		auth_len = tds->conn->authentication->packet_len;
 		packet_size += auth_len;
 #else
@@ -846,7 +788,7 @@ tds7_send_login(TDSSOCKET * tds, TDSLOGIN * login)
 		tdsdump_log(TDS_DBG_INFO2, "using NTLM authentication for '%s' account\n", user_name);
 		tds->conn->authentication = tds_ntlm_get_auth(tds);
 		if (!tds->conn->authentication)
-			return TDS_FAIL;
+			goto cleanup;
 		auth_len = tds->conn->authentication->packet_len;
 		packet_size += auth_len;
 	} else if (user_name_len == 0) {
@@ -855,21 +797,16 @@ tds7_send_login(TDSSOCKET * tds, TDSLOGIN * login)
 		tdsdump_log(TDS_DBG_INFO2, "using GSS authentication\n");
 		tds->conn->authentication = tds_gss_get_auth(tds);
 		if (!tds->conn->authentication)
-			return TDS_FAIL;
+			goto cleanup;
 		auth_len = tds->conn->authentication->packet_len;
 		packet_size += auth_len;
 # else
 		tdsdump_log(TDS_DBG_ERROR, "requested GSS authentication but not compiled in\n");
-		return TDS_FAIL;
+		goto cleanup;
 # endif
 #endif
 	}
 
-
-	/* initialize ouput buffer for strings */
-	rc = tds_dynamic_stream_init(&data_stream, &data, 0);
-	if (TDS_FAILED(rc))
-		return rc;
 
 #define SET_FIELD_DSTR(field, dstr) do { \
 	data_fields[field].ptr = tds_dstr_cstr(&(dstr)); \
@@ -890,12 +827,8 @@ tds7_send_login(TDSSOCKET * tds, TDSLOGIN * login)
 	SET_FIELD_DSTR(LIBRARY_NAME, login->library);
 	SET_FIELD_DSTR(LANGUAGE, login->language);
 	SET_FIELD_DSTR(DATABASE_NAME, login->database);
-	SET_FIELD_DSTR(DB_FILENAME, login->db_filename);
+	data_fields[DBFILE_NAME].len = 0;
 	data_fields[NEW_PASSWORD].len = 0;
-	if (IS_TDS72_PLUS(tds->conn) && login->use_new_password) {
-		option_flag3 |= TDS_CHANGE_PASSWORD;
-		SET_FIELD_DSTR(NEW_PASSWORD, login->new_password);
-	}
 
 	/* convert data fields */
 	for (field = data_fields; field < data_fields + TDS_VECTOR_SIZE(data_fields); ++field) {
@@ -906,17 +839,13 @@ tds7_send_login(TDSSOCKET * tds, TDSLOGIN * login)
 		if (field->len) {
 			tds_staticin_stream_init(&input, field->ptr, field->len);
 			rc = tds_convert_stream(tds, tds->conn->char_convs[client2ucs2], to_server, &input.stream, &data_stream.stream);
-			if (TDS_FAILED(rc)) {
-				free(data);
-				return TDS_FAIL;
-			}
+			if (TDS_FAILED(rc))
+				goto cleanup;
 		}
 		field->len = data_stream.size - data_pos;
 	}
 	pwd = (unsigned char *) data + data_fields[PASSWORD].pos - current_pos;
 	tds7_crypt_pass(pwd, data_fields[PASSWORD].len, pwd);
-	pwd = (unsigned char *) data + data_fields[NEW_PASSWORD].pos - current_pos;
-	tds7_crypt_pass(pwd, data_fields[NEW_PASSWORD].len, pwd);
 	packet_size += data_stream.size;
 
 #if !defined(TDS_DEBUG_LOGIN)
@@ -926,27 +855,24 @@ tds7_send_login(TDSSOCKET * tds, TDSLOGIN * login)
 	TDS_PUT_INT(tds, packet_size);
 	switch (login->tds_version) {
 	case 0x700:
-		tds7version = tds70Version;
+		ptds7version = tds70Version;
 		break;
 	case 0x701:
-		tds7version = tds71Version;
+		ptds7version = tds71Version;
 		break;
 	case 0x702:
-		tds7version = tds72Version;
+		ptds7version = tds72Version;
 		break;
 	case 0x703:
-		tds7version = tds73Version;
-		break;
-	case 0x704:
-		tds7version = tds74Version;
+		ptds7version = tds73Version;
 		break;
 	default:
-		assert(0 && 0x700 <= login->tds_version && login->tds_version <= 0x704);
+		assert(0 && 0x700 <= login->tds_version && login->tds_version <= 0x703);
 	}
 	
-	tds_put_int(tds, tds7version);
+	tds_put_n(tds, ptds7version, sizeof(tds70Version));
 
-	if (4096 <= login->block_size && login->block_size < 65536u)
+	if (512 <= login->block_size && login->block_size < 1000000)
 		block_size = login->block_size;
 
 	tds_put_int(tds, block_size);	/* desired packet size being requested by client */
@@ -970,15 +896,10 @@ tds7_send_login(TDSSOCKET * tds, TDSLOGIN * login)
 
 	tds_put_byte(tds, option_flag2);
 
-	if (login->readonly_intent && IS_TDS71_PLUS(tds->conn))
-		sql_type_flag |= TDS_READONLY_INTENT;
 	tds_put_byte(tds, sql_type_flag);
+	tds_put_byte(tds, IS_TDS73_PLUS(tds->conn) ? option_flag3 : reserved_flag);
 
-	if (IS_TDS73_PLUS(tds->conn))
-		option_flag3 |= TDS_UNKNOWN_COLLATION_HANDLING;
-	tds_put_byte(tds, option_flag3);
-
-	tds_put_int(tds, time_zone);
+	tds_put_n(tds, time_zone, sizeof(time_zone));
 	tds_put_n(tds, collation, sizeof(collation));
 
 #define PUT_STRING_FIELD_PTR(field) do { \
@@ -1022,7 +943,7 @@ tds7_send_login(TDSSOCKET * tds, TDSLOGIN * login)
 	TDS_PUT_SMALLINT(tds, auth_len);	/* this matches numbers at end of packet */
 
 	/* db file */
-	PUT_STRING_FIELD_PTR(DB_FILENAME);
+	PUT_STRING_FIELD_PTR(DBFILE_NAME);
 
 	if (IS_TDS72_PLUS(tds->conn)) {
 		/* new password */
@@ -1042,6 +963,10 @@ tds7_send_login(TDSSOCKET * tds, TDSLOGIN * login)
 
 	free(data);
 	return rc;
+
+cleanup:
+	free(data);
+	return TDS_FAIL;
 }
 
 /**
@@ -1049,19 +974,20 @@ tds7_send_login(TDSSOCKET * tds, TDSLOGIN * login)
  * the calling function is responsible for ensuring crypt_pass is at least 
  * 'len' characters
  */
-static void
+unsigned char *
 tds7_crypt_pass(const unsigned char *clear_pass, size_t len, unsigned char *crypt_pass)
 {
 	size_t i;
 
 	for (i = 0; i < len; i++)
 		crypt_pass[i] = ((clear_pass[i] << 4) | (clear_pass[i] >> 4)) ^ 0xA5;
+	return crypt_pass;
 }
 
 static TDSRET
 tds71_do_login(TDSSOCKET * tds, TDSLOGIN* login)
 {
-	int i, pkt_len;
+	int i, len;
 	const char *instance_name = tds_dstr_isempty(&login->instance_name) ? "MSSQLServer" : tds_dstr_cstr(&login->instance_name);
 	int instance_name_len = strlen(instance_name) + 1;
 	TDS_CHAR crypt_flag;
@@ -1070,7 +996,7 @@ tds71_do_login(TDSSOCKET * tds, TDSLOGIN* login)
 
 #define START_POS 21
 #define UI16BE(n) ((n) >> 8), ((n) & 0xffu)
-#define SET_UI16BE(i,n) TDS_PUT_UA2BE(&buf[i],n)
+#define SET_UI16BE(i,n) do { buf[i] = ((n) >> 8); buf[i+1] = ((n) & 0xffu); } while(0)
 	TDS_UCHAR buf[] = {
 		/* netlib version */
 		0, UI16BE(START_POS), UI16BE(6),
@@ -1136,7 +1062,6 @@ tds71_do_login(TDSSOCKET * tds, TDSLOGIN* login)
 	if (IS_TDS72_PLUS(tds->conn))
 #if ENABLE_ODBC_MARS
 		tds_put_byte(tds, login->mars);
-	login->mars = 0;
 #else
 		tds_put_byte(tds, 0);
 #endif
@@ -1148,7 +1073,7 @@ tds71_do_login(TDSSOCKET * tds, TDSLOGIN* login)
 	ret = tds_read_packet(tds);
 	if (ret <= 0 || tds->in_flag != TDS_REPLY)
 		return TDS_FAIL;
-	pkt_len = tds->in_len - tds->in_pos;
+	len = tds->in_len - tds->in_pos;
 
 	/* the only thing we care is flag */
 	p = tds->in_buf + tds->in_pos;
@@ -1156,30 +1081,26 @@ tds71_do_login(TDSSOCKET * tds, TDSLOGIN* login)
 	crypt_flag = 2;
 	for (i = 0;; i += 5) {
 		TDS_UCHAR type;
-		int off, len;
+		int off, l;
 
-		if (i >= pkt_len)
+		if (i >= len)
 			return TDS_FAIL;
 		type = p[i];
 		if (type == 0xff)
 			break;
 		/* check packet */
-		if (i+4 >= pkt_len)
+		if (i+4 >= len)
 			return TDS_FAIL;
-		off = TDS_GET_UA2BE(&p[i+1]);
-		len = TDS_GET_UA2BE(&p[i+3]);
-		if (off > pkt_len || (off+len) > pkt_len)
+		off = (((int) p[i+1]) << 8) | p[i+2];
+		l = (((int) p[i+3]) << 8) | p[i+4];
+		if (off > len || (off+l) > len)
 			return TDS_FAIL;
-		if (type == 1 && len >= 1) {
+		if (type == 1 && l >= 1) {
 			crypt_flag = p[off];
 		}
-#if ENABLE_ODBC_MARS
-		if (IS_TDS72_PLUS(tds->conn) && type == 4 && len >= 1)
-			login->mars = p[off];
-#endif
 	}
 	/* we readed all packet */
-	tds->in_pos += pkt_len;
+	tds->in_pos += len;
 	/* TODO some mssql version do not set last packet, update tds according */
 
 	tdsdump_log(TDS_DBG_INFO1, "detected flag %d\n", crypt_flag);

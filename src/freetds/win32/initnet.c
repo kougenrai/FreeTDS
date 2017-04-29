@@ -32,8 +32,6 @@ DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 
 		if (WSAStartup(MAKEWORD(1, 1), &wsaData) != 0)
 			return FALSE;
-
-		DisableThreadLibraryCalls(hinstDLL);
 		break;
 
 	case DLL_PROCESS_DETACH:

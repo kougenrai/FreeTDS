@@ -222,7 +222,6 @@ odbc_init_parser(FILE *f)
 		odbc_fatal("parser file already setup\n");
 	parse_file = f;
 	odbc_line_num = 0;
-	odbc_tds_version();
 }
 
 const char *

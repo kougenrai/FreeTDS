@@ -5,6 +5,9 @@
 
 #include "common.h"
 
+static char software_version[] = "$Id: t0013.c,v 1.31 2010-12-30 18:11:07 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
+
 #define BLOB_BLOCK_SIZE 4096
 
 int failed = 0;
@@ -91,7 +94,7 @@ test(int argc, char **argv, int over4k)
 	isiz = ftell(fp);
 	fseek(fp, 0, SEEK_SET);
 
-	blob = (char *) malloc(isiz);
+	blob = malloc(isiz);
 	assert(blob);
 	result = fread((void *) blob, isiz, 1, fp);
 	assert(result == 1);

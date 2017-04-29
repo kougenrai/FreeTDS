@@ -1,8 +1,9 @@
 #include "common.h"
 
 /* test binding with UTF-8 encoding */
+static char software_version[] = "$Id: utf8.c,v 1.13 2011-07-12 10:16:59 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
 
-#ifndef _WIN32
 static void init_connect(void);
 
 static void
@@ -11,6 +12,26 @@ init_connect(void)
 	CHKAllocEnv(&odbc_env, "S");
 	SQLSetEnvAttr(odbc_env, SQL_ATTR_ODBC_VERSION, (SQLPOINTER) (SQL_OV_ODBC3), SQL_IS_UINTEGER);
 	CHKAllocConnect(&odbc_conn, "S");
+}
+
+static void
+CheckNoRow(const char *query)
+{
+	SQLRETURN rc;
+
+	rc = CHKExecDirect(T(query), SQL_NTS, "SINo");
+	if (rc == SQL_NO_DATA)
+		return;
+
+	do {
+		SQLSMALLINT cols;
+
+		CHKNumResultCols(&cols, "S");
+		if (cols != 0) {
+			fprintf(stderr, "Data not expected here, query:\n\t%s\n", query);
+			exit(1);
+		}
+	} while (CHKMoreResults("SNo") == SQL_SUCCESS);
 }
 
 /* test table name, it contains two japanese characters */
@@ -76,7 +97,7 @@ TestBinding(int minimun)
 	/* check rows */
 	for (n = 1, p = strings_hex; p[0] && p[1]; p += 2, ++n) {
 		sprintf(tmp, "IF NOT EXISTS(SELECT * FROM %s WHERE k = %d AND c = %s AND vc = %s) SELECT 1", table_name, (int) n, p[0], p[1]);
-		odbc_check_no_row(tmp);
+		CheckNoRow(tmp);
 	}
 
 	odbc_reset_statement();
@@ -99,14 +120,12 @@ main(int argc, char *argv[])
 	if (!odbc_driver_is_freetds()) {
 		odbc_disconnect();
 		printf("Driver is not FreeTDS, exiting\n");
-		odbc_test_skipped();
 		return 0;
 	}
 
 	if (!odbc_db_is_microsoft() || odbc_db_version_int() < 0x08000000u) {
 		odbc_disconnect();
 		printf("Test for MSSQL only\n");
-		odbc_test_skipped();
 		return 0;
 	}
 
@@ -127,7 +146,7 @@ main(int argc, char *argv[])
 	/* check rows */
 	for (n = 1, p = strings_hex; p[0] && p[1]; p += 2, ++n) {
 		sprintf(tmp, "IF NOT EXISTS(SELECT * FROM %s WHERE k = %d AND c = %s AND vc = %s) SELECT 1", table_name, (int) n, p[0], p[1]);
-		odbc_check_no_row(tmp);
+		CheckNoRow(tmp);
 	}
 
 	TestBinding(0);
@@ -143,14 +162,3 @@ main(int argc, char *argv[])
 	return 0;
 }
 
-#else
-
-int
-main(void)
-{
-	/* on Windows SQLExecDirect is always converted to SQLExecDirectW by the DM */
-	printf("Not possible for this platform.\n");
-	odbc_test_skipped();
-	return 0;
-}
-#endif

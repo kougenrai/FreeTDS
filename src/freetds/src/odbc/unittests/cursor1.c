@@ -2,9 +2,33 @@
 
 /* Test cursors */
 
+static char software_version[] = "$Id: cursor1.c,v 1.21 2011-07-12 10:16:59 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
+
 #define SWAP_STMT(b) do { SQLHSTMT xyz = odbc_stmt; odbc_stmt = b; b = xyz; } while(0)
 
 static int mssql2005 = 0;
+
+static void
+CheckNoRow(const char *query)
+{
+	SQLRETURN rc;
+
+	rc = CHKExecDirect(T(query), SQL_NTS, "SINo");
+	if (rc == SQL_NO_DATA)
+		return;
+
+	do {
+		SQLSMALLINT cols;
+
+		CHKNumResultCols(&cols, "S");
+		if (cols != 0) {
+			fprintf(stderr, "Data not expected here, query:\n\t%s\n", query);
+			odbc_disconnect();
+			exit(1);
+		}
+	} while (CHKMoreResults("SNo") == SQL_SUCCESS);
+}
 
 static void
 Test0(int use_sql, const char *create_sql, const char *insert_sql, const char *select_sql)
@@ -60,7 +84,10 @@ Test0(int use_sql, const char *create_sql, const char *insert_sql, const char *s
 		/* delete a row */
 		i = 1;
 		if (i > 0 && i <= num_row) {
-			CHKSetPos(i, use_sql ? SQL_POSITION : SQL_DELETE, SQL_LOCK_NO_CHANGE, mssql2005 ? "SI": "S");
+			if (mssql2005)
+				CHKSetPos(i, use_sql ? SQL_POSITION : SQL_DELETE, SQL_LOCK_NO_CHANGE, "SI");
+			else
+				CHKSetPos(i, use_sql ? SQL_POSITION : SQL_DELETE, SQL_LOCK_NO_CHANGE, "S");
 			if (use_sql) {
 				SWAP_STMT(stmt2);
 				CHKPrepare(T("DELETE FROM #test WHERE CURRENT OF C1"), SQL_NTS, "S");
@@ -108,12 +135,12 @@ Test0(int use_sql, const char *create_sql, const char *insert_sql, const char *s
 	odbc_reset_statement();
 
 	/* test values */
-	odbc_check_no_row("IF (SELECT COUNT(*) FROM #test) <> 4 SELECT 1");
-	odbc_check_no_row("IF NOT EXISTS(SELECT * FROM #test WHERE i = 3 AND c = 'ccc') SELECT 1");
-	odbc_check_no_row("IF NOT EXISTS(SELECT * FROM #test WHERE i = 4 AND c = 'dddd') SELECT 1");
+	CheckNoRow("IF (SELECT COUNT(*) FROM #test) <> 4 SELECT 1");
+	CheckNoRow("IF NOT EXISTS(SELECT * FROM #test WHERE i = 3 AND c = 'ccc') SELECT 1");
+	CheckNoRow("IF NOT EXISTS(SELECT * FROM #test WHERE i = 4 AND c = 'dddd') SELECT 1");
 	if (strstr(select_sql, "#a") == NULL || use_sql) {
-		odbc_check_no_row("IF NOT EXISTS(SELECT * FROM #test WHERE i = 2 AND c = 'foo') SELECT 1");
-		odbc_check_no_row("IF NOT EXISTS(SELECT * FROM #test WHERE i = 6 AND c = 'foo') SELECT 1");
+		CheckNoRow("IF NOT EXISTS(SELECT * FROM #test WHERE i = 2 AND c = 'foo') SELECT 1");
+		CheckNoRow("IF NOT EXISTS(SELECT * FROM #test WHERE i = 6 AND c = 'foo') SELECT 1");
 	}
 }
 

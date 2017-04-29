@@ -7,6 +7,9 @@
 #include "common.h"
 #include <assert.h>
 
+static char software_version[] = "$Id: binary_test.c,v 1.10 2011-07-12 10:16:59 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
+
 #define ERR_BUF_SIZE 256
 /* 
    Name of table used by the test. Should contain single column,
@@ -136,7 +139,6 @@ main(int argc, char **argv)
 	/* compare inserted and read back test patterns */
 	if (bytes_returned != TEST_BUF_LEN) {
 		show_error("main(): comparing buffers", "Mismatch in input and output pattern sizes.");
-		printf("Expected %lu got %lu\n", (unsigned long) TEST_BUF_LEN, (unsigned long) bytes_returned);
 		clean_up();
 		return -1;
 	}

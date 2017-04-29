@@ -36,7 +36,9 @@
 #include <freetds/tds.h>
 #include <freetds/convert.h>
 #include <freetds/string.h>
-#include <freetds/checks.h>
+#include "tds_checks.h"
+
+TDS_RCSID(var, "$Id: tds_checks.c,v 1.35 2011-10-30 17:00:35 freddy77 Exp $");
 
 #if ENABLE_EXTRA_CHECKS
 static void
@@ -105,7 +107,7 @@ tds_check_tds_extra(const TDSSOCKET * tds)
 	assert(tds->out_buf >= tds->send_packet->buf);
 	assert(tds->out_buf + tds->out_buf_max + TDS_ADDITIONAL_SPACE <=
 		tds->send_packet->buf + tds->send_packet->capacity);
-	assert(tds->out_pos <= tds->out_buf_max + TDS_ADDITIONAL_SPACE);
+	assert(tds->out_pos <= tds->out_buf_max);
 
 	assert(tds->in_buf == tds->recv_packet->buf || tds->in_buf == tds->recv_packet->buf + 16);
 	assert(tds->recv_packet->capacity > 0);
@@ -183,10 +185,6 @@ tds_check_column_extra(const TDSCOLUMN * column)
 	assert(column->funcs);
 	assert(column->column_type > 0);
 
-	/* specific checks, if true fully checked */
-	if (column->funcs->check(column))
-		return;
-
 	/* check type and server type same or SQLNCHAR -> SQLCHAR */
 #define SPECIAL(ttype, server_type, varint) \
 	if (column->column_type == ttype && column->on_server.column_type == server_type && column_varint_size == varint) {} else
@@ -199,10 +197,8 @@ tds_check_column_extra(const TDSCOLUMN * column)
 
 	varint_ok = 0;
 	if (column_varint_size == 8) {
-		if (column->on_server.column_type == XSYBVARCHAR
-		    || column->on_server.column_type == XSYBVARBINARY
-		    || column->on_server.column_type == XSYBNVARCHAR)
-			varint_ok = 1;
+		assert(column->on_server.column_type == XSYBVARCHAR || column->on_server.column_type == XSYBVARBINARY || column->on_server.column_type == XSYBNVARCHAR || column->on_server.column_type == SYBMSXML || column->on_server.column_type == SYBMSUDT);
+		varint_ok = 1;
 	} else if (is_blob_type(column->column_type)) {
 		assert(column_varint_size >= 4);
 	} else if (column->column_type == SYBVARIANT) {
@@ -214,18 +210,26 @@ tds_check_column_extra(const TDSCOLUMN * column)
 	varint_ok = varint_ok || tds_get_varint_size(&conn, column->on_server.column_type) == column_varint_size;
 	assert(varint_ok);
 
-	assert(!is_numeric_type(column->column_type));
-	assert(column->column_cur_size <= column->column_size);
+	/* check current size <= size */
+	if (is_numeric_type(column->column_type)) {
+		/* I don't like that much this difference between numeric and not numeric - freddy77 */
+		/* TODO what should be the size ?? */
+		assert(column->column_prec >= 1 && column->column_prec <= MAXPRECISION);
+		assert(column->column_scale <= column->column_prec);
+/*		assert(column->column_cur_size == tds_numeric_bytes_per_prec[column->column_prec] + 2 || column->column_cur_size == -1); */
+	} else {
+		assert(column->column_cur_size <= column->column_size);
+	}
 
 	/* check size of fixed type correct */
 	size = tds_get_size_by_type(column->column_type);
-	/* these peculiar types are variable but have only a possible size */
-	if ((size > 0 && (column->column_type != SYBBITN && column->column_type != SYBDATEN && column->column_type != SYBTIMEN))
-	    || column->column_type == SYBVOID) {
+	assert(size != 0 || column->column_type == SYBVOID);
+	if (size >= 0 && column->column_type != SYBBITN) {
 		/* check macro */
 		assert(is_fixed_type(column->column_type));
 		/* check current size */
-		assert(size == column->column_size);
+		if (column->column_type != SYBMSDATE)
+			assert(size == column->column_size);
 		/* check cases where server need nullable types */
 		if (column->column_type != column->on_server.column_type && (column->column_type != SYBINT8 || column->on_server.column_type != SYB5INT8)) {
 			assert(!is_fixed_type(column->on_server.column_type));
@@ -233,9 +237,11 @@ tds_check_column_extra(const TDSCOLUMN * column)
 			assert(column->column_size == column->column_cur_size || column->column_cur_size == -1);
 		} else {
 			assert(column_varint_size == 0
-				|| (column->column_type == SYBUNIQUE && column_varint_size == 1));
+				|| (column->column_type == SYBUNIQUE && column_varint_size == 1)
+				|| (column->column_type == SYBMSDATE  && column_varint_size == 1));
 			assert(column->column_size == column->column_cur_size
-				|| (column->column_type == SYBUNIQUE && column->column_cur_size == -1));
+				|| (column->column_type == SYBUNIQUE && column->column_cur_size == -1)
+				|| (column->column_type == SYBMSDATE  && column->column_cur_size == -1));
 		}
 		assert(column->column_size == column->on_server.column_size);
 	} else {
@@ -283,20 +289,12 @@ tds_check_resultinfo_extra(const TDSRESULTINFO * res_info)
 void
 tds_check_cursor_extra(const TDSCURSOR * cursor)
 {
-	assert(cursor);
-
-	assert(cursor->ref_count > 0);
-
-	if (cursor->res_info)
-		tds_check_resultinfo_extra(cursor->res_info);
 }
 
 void
 tds_check_dynamic_extra(const TDSDYNAMIC * dyn)
 {
 	assert(dyn);
-
-	assert(dyn->ref_count > 0);
 
 	if (dyn->res_info)
 		tds_check_resultinfo_extra(dyn->res_info);

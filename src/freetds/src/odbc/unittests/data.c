@@ -105,7 +105,6 @@ static struct lookup_int sql_c_types[] = {
 	TYPE(SQL_C_CHAR),
 	TYPE(SQL_C_WCHAR),
 	TYPE(SQL_C_LONG),
-	TYPE(SQL_C_SBIGINT),
 	TYPE(SQL_C_SHORT),
 	TYPE(SQL_C_TIMESTAMP),
 #undef TYPE
@@ -198,6 +197,9 @@ main(int argc, char *argv[])
 	fclose(f);
 
 	printf("\n");
+
+	/* mssql 2008 give a warning for truncation (01004) */
+	Test("VARCHAR(20)", "  15.1245  ", SQL_C_NUMERIC, "38 0 1 0F");
 
 	odbc_disconnect();
 

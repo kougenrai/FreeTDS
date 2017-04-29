@@ -12,8 +12,6 @@ add_char(char *s, SQLWCHAR ch)
 		s += sprintf(s, "\\r");
 	else if (ch == '\n')
 		s += sprintf(s, "\\n");
-	else if ((unsigned int) ch < 32u)
-		s += sprintf(s, "\\x%02x", (unsigned int) ch);
 	else if ((unsigned int) ch < 256u)
 		s += sprintf(s, "%c", (char) ch);
 	else
@@ -29,7 +27,6 @@ odbc_c2string(char *out, SQLSMALLINT out_c_type, const void *in, size_t in_len)
 		char s[256];
 		SQLWCHAR ws[256/sizeof(SQLWCHAR)];
 		SQLINTEGER i;
-		SQLBIGINT bi;
 		SQLSMALLINT si;
 		SQL_NUMERIC_STRUCT num;
 		SQL_TIMESTAMP_STRUCT ts;
@@ -74,10 +71,6 @@ odbc_c2string(char *out, SQLSMALLINT out_c_type, const void *in, size_t in_len)
 	case SQL_C_LONG:
 		assert(in_len == sizeof(SQLINTEGER));
 		sprintf(s, "%ld", (long int) IN.i);
-		break;
-	case SQL_C_SBIGINT:
-		assert(in_len == sizeof(SQLBIGINT));
-		sprintf(s, "%" PRId64, IN.bi);
 		break;
 	case SQL_C_SHORT:
 		assert(in_len == sizeof(SQLSMALLINT));

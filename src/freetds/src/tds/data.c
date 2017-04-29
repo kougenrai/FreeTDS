@@ -18,165 +18,6 @@
  */
 
 /**
- * \page new_type How to add a new type
- * \section intro Introduction
- * Adding a new type in FreeTDS is a quite complicated task involving
- * different tasks.
- *
- * To see an example you can look at
- * \commit{adb893f1381fd3ea40564c775e30dc8cdc81dcf2}
- * ("Implement big(date)time types") and parent changes in the source
- * repository.
- *
- * \section tds libTDS changes
- * <ul>
- * <li>protocol. First thing to do is add the type to the protocol.
- *    A type usually have some mnemonic constant and a structure.
- *    Declare them in \c include/freetds/proto.h file. Note that
- *    here you should declare the structure the server use not
- *    the structure to hold the data in libTDS.
- *    <br>Cfr \commit{a74a06e1f97f3137f6cf1bc7319dd7a2cfb52b1f}.
- *
- * <li>base information. Add the type to \c misc/types.csv file
- *    (I use LibreOffice Calc to do it). This table maintain the
- *    base information for a type.
- *    <br>Cfr \commit{680cb3371e042bb372cbc5e6feb4054e50d40c1a}.
- *
- * <li>data. There should be some code to handle this type to/from
- *    the server. This code is implemented in \c include/freetds/data.h
- *    and \c src/tds/data.c. You can either add a new set of functions
- *    to handle this new type or add the type handling do another set
- *    of types depending on how complicated is that type.
- *    One thing you have to to at this step is determine how you store
- *    that type in libTDS. This is quite important at upper level
- *    libraries will have to use these structures or even present
- *    these data to client code (like DB-Library usually do).
- *    Due to the way FreeTDS works now you would get a linker error
- *    in the ODBC part. You can either ignore the error and proceed
- *    with libTDS, add the code to ODBC or disable temporarily ODBC.
- *    <br>Cfr \commit{680cb3371e042bb372cbc5e6feb4054e50d40c1a}.
- *
- * <li>enable the type from server. In order to receive the new type
- *    from the server you have to tell the server that we support
- *    that type. This can be either done changing the protocol (usually
- *    Microsoft) or enabling some flags (capabilities for Sybase).
- *    <br>Cfr \commit{a498703ff9e309c656b19dd990f4cad0283a47c7}.
- *
- * <li>conversions. Conversions are not hard to write but usually
- *    require quite a bit of coding. After extending CONV_RESULT
- *    type in \c include/freetds/convert.h and adding the type to
- *    the script that generate the conversion tables in
- *    \c src/tds/tds_willconvert.pl you have to write the big part
- *    in \c src/tds/covnert.c. You have to implement all kind of
- *    conversions you declared in the previous file. Reuse the
- *    functions that are there (for instance there are some
- *    parser functions). Also if there are similar types it could
- *    be helpful to convert first your type to a super type then
- *    use the conversion for that type. For instance for SMALLINT
- *    type (\c tds_convert_int2) the type is just readed and then
- *    \c tds_convert_int is called which handle any int (actually
- *    32 bit integer). Same for data where the \c TDS_DATETIMEALL
- *    structure is used. Note that conversions to binary (which
- *    usually are implemented) are done in another function
- *    (\c tds_convert_to_binary).
- *    <br>Cfr \commit{9ed52cb78f725607ac109c8c284ca7c4658d87a9}.
- *
- * <li>string definition. Add string for your type to
- *    \c src/tds/token.c in \c tds_prtype.
- *    <br>Cfr \commit{ac0d3b46db7d98436cd76f906b7d455f7651faae}.
- *
- * <li>conversion tests. You probably will have done some mistake
- *    with conversions but don't mind, there are some tests which
- *    will help sorting this out.
- *    \c src/tds/unittests/convert.c
- *    try any possible combination of conversion to check if
- *    all conversion are implemented (it does not check the
- *    conversions themself).
- *    \c src/tds/unittests/t0007.c test that your conversion
- *    are working. Just add manually the conversions you want
- *    to try.
- *    <br>Cfr \commit{abcc09c9a88acd0e9a45b46dab3ca44309917a02}.
- *
- * <li>parameter. Add type/parameter declaration in
- *    \c tds_get_column_declaration in \c src/tds/query.c.
- *    Also do any necessary step to initialize the parameter
- *    to send to server.
- *    <br>Cfr \commit{54fdd3233e430c045cf5524ac385770738d9e92c},
- *    \commit{88cfea19d91245372779b8893a2d62b42696cd49}.
- *
- * <li>emulated prepared/rpc. If needed handle your type
- *    in \c tds_put_param_as_string in \c src/tds/query.c.
- *    <br>Cfr \commit{017b7bf2fee0f09847e64546d27382d2f2b756f4}.
- *
- * </ul>
- *
- * \section odbc ODBC changes
- * ODBC is the most complicated library to add a type to.
- * Usually its data are different from libTDS so you have to add additional
- * code for conversions which are not required by other libraries.
- * <ul>
- * <li>type information. Every type in ODBC have related information.
- *    These information are set in \c src/odbc/odbc_data.c.
- *    Depending on the changes you did for data in libTDS you should
- *    handle the new type.
- *    <br>Cfr \commit{71e189e206dc9b6f6513e0aa0e4133a4f8dec110}.
- *
- * <li>type information test. Related to the previous change there
- *    is \c src/odbc/unittests/describecol.c test. Add a test case
- *    for new type. You should attempt to run same test also on
- *    proprietary library if possible.
- *    <br>Cfr \commit{8a8ec16a6a514a5d6ac66c2470eff51f6a8d4a53}.
- *
- * <li>conversions from odbc. Define how the ODBC type should convert
- *    to the server and implement the conversion.
- *    <br>Cfr \commit{29606cbf413c44e49ddfcfb8a93b8a6bd2565a84},
- *    \commit{87c84e20a594472a72990b12d4a1451b22e6714b}.
- *
- * <li>conversions to binary. Binary representation in ODBC are usually
- *    different from server ones. If so implement the proper conversions.
- *    <br>Cfr \commit{56009f35d3e0def339a0c5cb98d006e5e710d523}.
- *
- * <li>conversions to characters. Same problem for character types.
- *    <br>Cfr \commit{25ff091880dabc32f28a73f09bf31c01314aca2f}.
- *
- * <li>conversion test. You probably want to test ODBC conversions.
- *    This can be done changing \c src/odbc/unittests/data.c test and
- *    \c src/odbc/unittests/genparams.c.
- *    <br>Cfr \commit{e69f7d564dac44884f7c5f0106cceafce4af168b}.
- * </ul>
- *
- * \section ctlib CT-Library changes
- * This is quite easy as usual the conversion in libTDS are fine for
- * this library.
- * <ul>
- * <li>define type in \c include/cspublic.h
- * <li>implement conversion in \c src/ctlib/cs.h
- * <li>set corrent conversion from cs types to server in
- *    \c src/ctlib/ct.c
- * </ul>
- * Cfr \commit{c5e71e5ad4a557038ecedcec457e2531ab02a77b}.
- *
- * \section dblib DB-Library changes
- * A bit more complicated than CT-Library but not that much.
- * <ul>
- * <li>add type and binding type to \c include/sybdb.h
- * <li>add NULL handling in \c dbgetnull, \c dbsetnull
- *    and \c default_null_representation in
- *    \c src/dblib/dblib.c
- * <li>add binding to dbbindtype
- * <li>add support for conversion from/to server
- * <li>add printable size
- * <li>return correct type string
- * </ul>
- * Cfr \commit{99dd126e0eb248dd3079b2a7cf97437fe3bcd163}.
- *
- * \section apps Applications changes
- * datacopy application requires some changes too to support new types
- * so add them to \c src/apps/datacopy.c.
- * <br>Cfr \commit{e59c48ac39c76abb036651f8ec238090eef321c9}.
- */
-
-/**
  * @file
  * @brief Handle different data handling from network
  */
@@ -199,9 +40,11 @@
 #include <freetds/tds.h>
 #include <freetds/bytes.h>
 #include <freetds/iconv.h>
-#include <freetds/checks.h>
+#include "tds_checks.h"
 #include <freetds/stream.h>
 #include <freetds/data.h>
+
+TDS_RCSID(var, "$Id: data.c,v 1.45 2011-10-30 16:47:18 freddy77 Exp $");
 
 #define USE_ICONV (tds->conn->use_iconv)
 
@@ -222,7 +65,7 @@ static void tds_swap_numeric(TDS_NUMERIC *num);
  * @param type   type to set
  */
 void
-tds_set_column_type(TDSCONNECTION * conn, TDSCOLUMN * curcol, TDS_SERVER_TYPE type)
+tds_set_column_type(TDSCONNECTION * conn, TDSCOLUMN * curcol, int type)
 {
 	/* set type */
 	curcol->on_server.column_type = type;
@@ -329,18 +172,13 @@ tds_set_param_type(TDSCONNECTION * conn, TDSCOLUMN * curcol, TDS_SERVER_TYPE typ
 			curcol->on_server.column_type = XSYBVARBINARY;
 		}
 		break;
-	case SYB5BIGTIME:
-	case SYB5BIGDATETIME:
-		curcol->column_prec = 6;
-		curcol->column_scale = 6;
-		break;
 	default:
 		break;
 	}
 }
 
-TDS_SERVER_TYPE
-tds_get_cardinal_type(TDS_SERVER_TYPE datatype, int usertype)
+int
+tds_get_cardinal_type(int datatype, int usertype)
 {
 	switch (datatype) {
 	case XSYBVARBINARY:
@@ -364,8 +202,6 @@ tds_get_cardinal_type(TDS_SERVER_TYPE datatype, int usertype)
 			return SYBTEXT;
 		}
 		break;
-	default:
-		break;
 	}
 	return datatype;
 }
@@ -384,7 +220,7 @@ tds_generic_get_info(TDSSOCKET *tds, TDSCOLUMN *col)
 	case 2:
 		/* assure > 0 */
 		col->column_size = tds_get_smallint(tds);
-		/* under TDS7.2 this means ?var???(MAX) */
+		/* under TDS9 this means ?var???(MAX) */
 		if (col->column_size < 0 && IS_TDS72_PLUS(tds->conn)) {
 			col->column_size = 0x3ffffffflu;
 			col->column_varint_size = 8;
@@ -549,10 +385,8 @@ TDS_COMPILE_CHECK(tds_variant_offset,TDS_OFFSET(TDSVARIANT, data) == TDS_OFFSET(
 TDSRET
 tds_variant_get(TDSSOCKET * tds, TDSCOLUMN * curcol)
 {
-	unsigned int colsize = tds_get_uint(tds);
-	int varint;
-	TDS_SERVER_TYPE type;
-	TDS_UCHAR info_len;
+	int colsize = tds_get_int(tds), varint;
+	TDS_UCHAR type, info_len;
 	TDSVARIANT *v;
 	TDSRET rc;
 
@@ -563,12 +397,9 @@ tds_variant_get(TDSSOCKET * tds, TDSCOLUMN * curcol)
 		return TDS_SUCCESS;
 	}
 
-	type = (TDS_SERVER_TYPE) tds_get_byte(tds);
-	info_len = tds_get_byte(tds);
-	if (!is_tds_type_valid(type))
-		goto error_type;
 	v = (TDSVARIANT*) curcol->column_data;
-	v->type = type;
+	v->type = type = tds_get_byte(tds);
+	info_len = tds_get_byte(tds);
 	colsize -= 2;
 	if (info_len > colsize)
 		goto error_type;
@@ -590,7 +421,7 @@ tds_variant_get(TDSSOCKET * tds, TDSCOLUMN * curcol)
 		if (v->data)
 			TDS_ZERO_FREE(v->data);
 		v->data_len = sizeof(TDS_NUMERIC);
-		num = tds_new0(TDS_NUMERIC, 1);
+		num = (TDS_NUMERIC*) calloc(1, sizeof(TDS_NUMERIC));
 		v->data = (TDS_CHAR *) num;
 		num->precision = tds_get_byte(tds);
 		num->scale     = tds_get_byte(tds);
@@ -629,16 +460,14 @@ tds_variant_get(TDSSOCKET * tds, TDSCOLUMN * curcol)
 		if (v->data)
 			TDS_ZERO_FREE(v->data);
 		v->data_len = sizeof(TDS_DATETIMEALL);
-		v->data = tds_new0(TDS_CHAR, sizeof(TDS_DATETIMEALL));
+		v->data = calloc(1, sizeof(TDS_DATETIMEALL));
 		curcol->column_type = type;
-		curcol->column_data = (unsigned char *) v->data;
+		curcol->column_data = (void *) v->data;
 		/* trick, call get function */
 		rc = tds_msdatetime_get(tds, curcol);
 		curcol->column_type = SYBVARIANT;
-		curcol->column_data = (unsigned char *) v;
+		curcol->column_data = (void *) v;
 		return rc;
-	default:
-		break;
 	}
 	varint = (type == SYBUNIQUE) ? 0 : tds_get_varint_size(tds->conn, type);
 	if (varint != info_len || varint > 2)
@@ -705,6 +534,15 @@ tds_generic_get(TDSSOCKET * tds, TDSCOLUMN * curcol)
 	tdsdump_log(TDS_DBG_INFO1, "tds_get_data: type %d, varint size %d\n", curcol->column_type, curcol->column_varint_size);
 	switch (curcol->column_varint_size) {
 	case 4:
+		/*
+		 * LONGBINARY
+		 * This type just stores a 4-byte length
+		 */
+		if (curcol->column_type == SYBLONGBINARY) {
+			colsize = tds_get_int(tds);
+			break;
+		}
+		
 		/* It's a BLOB... */
 		len = tds_get_byte(tds);
 		blob = (TDSBLOB *) curcol->column_data;
@@ -830,8 +668,6 @@ tds_generic_get(TDSSOCKET * tds, TDSCOLUMN * curcol)
 			memset(dest + colsize, fillchar, curcol->column_size - colsize);
 		colsize = curcol->column_size;
 		break;
-	default:
-		break;
 	}
 
 #ifdef WORDS_BIGENDIAN
@@ -876,44 +712,11 @@ tds_generic_put_info(TDSSOCKET * tds, TDSCOLUMN * col)
 		break;
 	}
 
-	/* TDS5 wants a table name for LOBs */
-	if (IS_TDS50(tds->conn)
-	    && (col->on_server.column_type == SYBIMAGE || col->on_server.column_type == SYBTEXT))
-		tds_put_smallint(tds, 0);
-
 	/* TDS7.1 output collate information */
 	if (IS_TDS71_PLUS(tds->conn) && is_collate_type(col->on_server.column_type))
 		tds_put_n(tds, tds->conn->collation, 5);
 
 	return TDS_SUCCESS;
-}
-
-unsigned
-tds_generic_put_info_len(TDSSOCKET * tds, TDSCOLUMN * col)
-{
-	unsigned len = col->column_varint_size;
-
-	CHECK_TDS_EXTRA(tds);
-	CHECK_COLUMN_EXTRA(col);
-
-	switch (col->column_varint_size) {
-	case 5:
-		len = 4;
-		break;
-	case 8:
-		len = 2;
-		break;
-	}
-
-	if (IS_TDS50(tds->conn)
-	    && (col->on_server.column_type == SYBIMAGE || col->on_server.column_type == SYBTEXT))
-		len += 2;
-
-	/* TDS7.1 output collate information */
-	if (IS_TDS71_PLUS(tds->conn) && is_collate_type(col->on_server.column_type))
-		len += 5;
-
-	return len;
 }
 
 /**
@@ -945,7 +748,7 @@ tds_generic_put(TDSSOCKET * tds, TDSCOLUMN * curcol, int bcp7)
 			tds_put_int(tds, 0);
 			break;
 		case 4:
-			if ((bcp7 || !IS_TDS7_PLUS(tds->conn)) && is_blob_type(curcol->on_server.column_type))
+			if (bcp7 && is_blob_type(curcol->on_server.column_type))
 				tds_put_byte(tds, 0);
 			else
 				tds_put_int(tds, -1);
@@ -1093,8 +896,6 @@ tds_generic_put(TDSSOCKET * tds, TDSCOLUMN * curcol, int bcp7)
 					tds_put_byte(tds, ' ');
 				else
 					tds_put_byte(tds, 0);
-				if (converted > 0)
-					tds_convert_string_free((char*)src, s);
 				return TDS_SUCCESS;
 			}
 			colsize = MIN(colsize, 255);
@@ -1128,7 +929,7 @@ tds_generic_put(TDSSOCKET * tds, TDSCOLUMN * curcol, int bcp7)
 			tds_put_n(tds, s, colsize);
 		}
 	}
-	if (converted > 0)
+	if (converted)
 		tds_convert_string_free((char*)src, s);
 	return TDS_SUCCESS;
 }
@@ -1215,15 +1016,6 @@ tds_numeric_put_info(TDSSOCKET * tds, TDSCOLUMN * col)
 #endif
 
 	return TDS_SUCCESS;
-}
-
-unsigned
-tds_numeric_put_info_len(TDSSOCKET * tds, TDSCOLUMN * col)
-{
-	CHECK_TDS_EXTRA(tds);
-	CHECK_COLUMN_EXTRA(col);
-
-	return 3;
 }
 
 TDSRET
@@ -1430,144 +1222,6 @@ tds_clrudt_put_info(TDSSOCKET * tds, TDSCOLUMN * col)
 	return TDS_SUCCESS;
 }
 
-TDSRET
-tds_sybbigtime_get_info(TDSSOCKET * tds, TDSCOLUMN * col)
-{
-	col->column_scale = col->column_prec = 6;
-	tds_get_byte(tds); /* 8, size */
-	tds_get_byte(tds); /* 6, precision ?? */
-	col->on_server.column_size = col->column_size = sizeof(TDS_UINT8);
-	return TDS_SUCCESS;
-}
-
-TDS_INT
-tds_sybbigtime_row_len(TDSCOLUMN *col)
-{
-	return sizeof(TDS_UINT8);
-}
-
-TDSRET
-tds_sybbigtime_get(TDSSOCKET * tds, TDSCOLUMN * col)
-{
-	TDS_UINT8 *dt = (TDS_UINT8 *) col->column_data;
-	int size = tds_get_byte(tds);
-
-	if (size == 0) {
-		col->column_cur_size = -1;
-		return TDS_SUCCESS;
-	}
-
-	col->column_cur_size = sizeof(TDS_UINT8);
-	*dt = tds_get_int8(tds);
-
-	return TDS_SUCCESS;
-}
-
-TDSRET
-tds_sybbigtime_put_info(TDSSOCKET * tds, TDSCOLUMN * col)
-{
-	tds_put_byte(tds, 8);
-	tds_put_byte(tds, 6);
-	return TDS_SUCCESS;
-}
-
-unsigned
-tds_sybbigtime_put_info_len(TDSSOCKET * tds, TDSCOLUMN * col)
-{
-	return 2;
-}
-
-TDSRET
-tds_sybbigtime_put(TDSSOCKET *tds, TDSCOLUMN *col, int bcp7)
-{
-	const TDS_UINT8 *dt = (const TDS_UINT8 *) col->column_data;
-
-	if (col->column_cur_size < 0) {
-		tds_put_byte(tds, 0);
-		return TDS_SUCCESS;
-	}
-
-	tds_put_byte(tds, 8);
-	tds_put_int8(tds, *dt);
-
-	return TDS_SUCCESS;
-}
-
-#if ENABLE_EXTRA_CHECKS
-int
-tds_generic_check(const TDSCOLUMN *col)
-{
-	return 0;
-}
-
-int
-tds_sybbigtime_check(const TDSCOLUMN *col)
-{
-	assert(col->column_type == col->on_server.column_type);
-	assert(col->on_server.column_size == col->column_size);
-	assert(!is_numeric_type(col->column_type));
-	assert(!is_fixed_type(col->column_type));
-	assert(!is_blob_type(col->column_type));
-	assert(!is_variable_type(col->column_type));
-	assert(is_nullable_type(col->column_type));
-	assert(col->column_varint_size == 1);
-	assert(col->column_prec == 6);
-	assert(col->column_scale == col->column_prec);
-
-	return 1;
-}
-
-int
-tds_clrudt_check(const TDSCOLUMN *col)
-{
-	return 0;
-}
-
-int
-tds_msdatetime_check(const TDSCOLUMN *col)
-{
-	assert(col->column_type == col->on_server.column_type);
-	assert(col->on_server.column_size == col->column_size);
-	assert(!is_numeric_type(col->column_type));
-	if (col->column_type == SYBMSDATE) {
-		assert(is_fixed_type(col->column_type));
-	} else {
-		assert(!is_fixed_type(col->column_type));
-	}
-	assert(!is_blob_type(col->column_type));
-	assert(!is_variable_type(col->column_type));
-	assert(is_nullable_type(col->column_type));
-	assert(col->column_varint_size == 1);
-	assert(col->column_prec >= 0 && col->column_prec <= 7);
-	assert(col->column_scale == col->column_prec);
-
-	return 1;
-}
-
-int
-tds_variant_check(const TDSCOLUMN *col)
-{
-	return 0;
-}
-
-int
-tds_numeric_check(const TDSCOLUMN *col)
-{
-	assert(col->column_type == col->on_server.column_type);
-	assert(col->on_server.column_size == col->column_size);
-	assert(is_numeric_type(col->column_type));
-	assert(!is_fixed_type(col->column_type));
-	assert(!is_blob_type(col->column_type));
-	assert(!is_variable_type(col->column_type));
-	assert(col->column_varint_size == 1);
-	assert(col->column_prec >= 1 && col->column_prec <= MAXPRECISION);
-	assert(col->column_scale <= col->column_prec);
-
-	return 1;
-}
-#endif
-
-
 #define TDS_DECLARE_FUNCS(name) \
      extern const TDSCOLUMNFUNCS tds_ ## name ## _funcs
 
@@ -1577,7 +1231,6 @@ TDS_DECLARE_FUNCS(numeric);
 TDS_DECLARE_FUNCS(variant);
 TDS_DECLARE_FUNCS(msdatetime);
 TDS_DECLARE_FUNCS(clrudt);
-TDS_DECLARE_FUNCS(sybbigtime);
 #include <freetds/popvis.h>
 
 static const TDSCOLUMNFUNCS *
@@ -1598,9 +1251,6 @@ tds_get_column_funcs(TDSCONNECTION *conn, int type)
 	case SYBMSDATETIME2:
 	case SYBMSDATETIMEOFFSET:
 		return &tds_msdatetime_funcs;
-	case SYB5BIGTIME:
-	case SYB5BIGDATETIME:
-		return &tds_sybbigtime_funcs;
 	}
 	return &tds_generic_funcs;
 }
@@ -1624,14 +1274,10 @@ tds_swap_datatype(int coltype, void *b)
 	case SYBINT4:
 	case SYBMONEY4:
 	case SYBREAL:
-	case SYBDATE:
-	case SYBTIME:
 		tds_swap_bytes(buf, 4);
 		break;
 	case SYBINT8:
 	case SYBFLT8:
-	case SYB5BIGTIME:
-	case SYB5BIGDATETIME:
 		tds_swap_bytes(buf, 8);
 		break;
 	case SYBUNIQUE:

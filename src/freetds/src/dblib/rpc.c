@@ -49,6 +49,8 @@
 #include <sybdb.h>
 #include <dblib.h>
 
+TDS_RCSID(var, "$Id: rpc.c,v 1.77 2011-09-25 11:31:41 freddy77 Exp $");
+
 static void rpc_clear(DBREMOTE_PROC * rpc);
 static void param_clear(DBREMOTE_PROC_PARAM * pparam);
 
@@ -107,7 +109,7 @@ dbrpcinit(DBPROCESS * dbproc, const char rpcname[], DBSMALLINT options)
 	/* rpc now contains the address of the dbproc's first empty (null) DBREMOTE_PROC* */
 
 	/* allocate */
-	if ((*rpc = tds_new0(DBREMOTE_PROC, 1)) == NULL) {
+	if ((*rpc = (DBREMOTE_PROC *) calloc(1, sizeof(DBREMOTE_PROC))) == NULL) {
 		dbperror(dbproc, SYBEMEM, errno);
 		return FAIL;
 	}
@@ -152,21 +154,17 @@ dbrpcinit(DBPROCESS * dbproc, const char rpcname[], DBSMALLINT options)
  * \sa dbrpcinit(), dbrpcsend()
  */
 RETCODE
-dbrpcparam(DBPROCESS * dbproc, const char paramname[], BYTE status, int db_type, DBINT maxlen, DBINT datalen, BYTE * value)
+dbrpcparam(DBPROCESS * dbproc, const char paramname[], BYTE status, int type, DBINT maxlen, DBINT datalen, BYTE * value)
 {
 	char *name = NULL;
 	DBREMOTE_PROC *rpc;
 	DBREMOTE_PROC_PARAM **pparam;
 	DBREMOTE_PROC_PARAM *param;
-	TDS_SERVER_TYPE type;
 
 	tdsdump_log(TDS_DBG_FUNC, "dbrpcparam(%p, %s, 0x%x, %d, %d, %d, %p)\n", 
-				   dbproc, paramname, status, db_type, maxlen, datalen, value);
+				   dbproc, paramname, status, type, maxlen, datalen, value);
 	CHECK_CONN(FAIL);
 	CHECK_PARAMETER(dbproc->rpc, SYBERPCS, FAIL);
-
-	DBPERROR_RETURN(!is_tds_type_valid(db_type), SYBEUDTY);
-	type = (TDS_SERVER_TYPE) db_type;
 
 	/* validate datalen parameter */
 
@@ -182,7 +180,7 @@ dbrpcparam(DBPROCESS * dbproc, const char paramname[], BYTE status, int db_type,
 	/* "value parameter for dbprcparam() can be NULL, only if the datalen parameter is 0." */
 	DBPERROR_RETURN(value == NULL && datalen != 0, SYBERPNULL);
 	
-	/* nullable types must provide a data length */
+	/* nullable types most provide a data length */
 	DBPERROR_RETURN(is_nullable_type(type) && datalen < 0, SYBERPUL);
 
 	/* validate maxlen parameter */
@@ -215,7 +213,7 @@ dbrpcparam(DBPROCESS * dbproc, const char paramname[], BYTE status, int db_type,
 		type = XSYBNVARCHAR;
 
 	/* allocate */
-	param = tds_new(DBREMOTE_PROC_PARAM, 1);
+	param = (DBREMOTE_PROC_PARAM *) malloc(sizeof(DBREMOTE_PROC_PARAM));
 	if (param == NULL) {
 		dbperror(dbproc, SYBEMEM, 0);
 		return FAIL;
@@ -255,9 +253,8 @@ dbrpcparam(DBPROCESS * dbproc, const char paramname[], BYTE status, int db_type,
 	 * then tack on our parameter's address.  
 	 */
 	for (rpc = dbproc->rpc; rpc->next != NULL; rpc = rpc->next)	/* find "current" procedure */
-		continue;
-	for (pparam = &rpc->param_list; *pparam != NULL; pparam = &(*pparam)->next)
-		continue;
+		;
+	for (pparam = &rpc->param_list; *pparam != NULL; pparam = &(*pparam)->next);
 
 	/* pparam now contains the address of the end of the rpc's parameter list */
 
@@ -342,7 +339,7 @@ param_row_alloc(TDSPARAMINFO * params, TDSCOLUMN * curcol, int param_num, void *
 			memcpy(curcol->column_data, value, size);
 		} else {
 			TDSBLOB *blob = (TDSBLOB *) curcol->column_data;
-			blob->textvalue = tds_new(TDS_CHAR, size);
+			blob->textvalue = (TDS_CHAR*) malloc(size);
 			tdsdump_log(TDS_DBG_FUNC, "blob parameter supported, size %d textvalue pointer is %p\n", 
 						  size, blob->textvalue);
 			if (!blob->textvalue)
@@ -370,7 +367,7 @@ param_info_alloc(TDSSOCKET * tds, DBREMOTE_PROC * rpc)
 	TDSPARAMINFO *params = NULL, *new_params;
 	BYTE *temp_value;
 	int  temp_datalen;
-	TDS_SERVER_TYPE temp_type;
+	int  temp_type;
 	int  param_is_null;
 
 	/* sanity */

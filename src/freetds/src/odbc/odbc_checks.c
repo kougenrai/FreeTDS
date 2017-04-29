@@ -34,6 +34,8 @@
 #include <freetds/odbc.h>
 #include <freetds/string.h>
 
+TDS_RCSID(var, "$Id: odbc_checks.c,v 1.22 2011-05-16 08:51:40 freddy77 Exp $");
+
 #if ENABLE_EXTRA_CHECKS
 
 void
@@ -65,7 +67,7 @@ odbc_check_stmt_extra(TDS_STMT * stmt)
 	assert(stmt->curr_param_row >= 0);
 	assert(stmt->curr_param_row <= stmt->num_param_rows);
 	if (stmt->prepared_query_is_rpc) {
-		const char *query = tds_dstr_cstr(&stmt->query);
+		char *query = stmt->prepared_query ? stmt->prepared_query : stmt->query;
 		assert(query);
 		assert(stmt->prepared_pos == NULL || (stmt->prepared_pos >= query && stmt->prepared_pos <= strchr(query,0)));
 	} else {

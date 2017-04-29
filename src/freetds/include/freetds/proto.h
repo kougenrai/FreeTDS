@@ -66,17 +66,10 @@ typedef struct tdsunique
 	TDS_UCHAR Data4[8];
 } TDS_UNIQUE;
 
-typedef TDS_INT TDS_DATE;
-typedef TDS_INT TDS_TIME;
-
-typedef TDS_UINT8 TDS_BIGTIME;
-typedef TDS_UINT8 TDS_BIGDATETIME;
-
 #define TDS5_PARAMFMT2_TOKEN       32	/* 0x20 */
 #define TDS_LANGUAGE_TOKEN         33	/* 0x21    TDS 5.0 only              */
 #define TDS_ORDERBY2_TOKEN         34	/* 0x22 */
 #define TDS_ROWFMT2_TOKEN          97	/* 0x61    TDS 5.0 only              */
-#define TDS_MSG_TOKEN             101	/* 0x65    TDS 5.0 only              */
 #define TDS_LOGOUT_TOKEN          113	/* 0x71    TDS 5.0 only? ct_close()  */
 #define TDS_RETURNSTATUS_TOKEN    121	/* 0x79                              */
 #define TDS_PROCID_TOKEN          124	/* 0x7C    TDS 4.2 only - TDS_PROCID */
@@ -95,17 +88,15 @@ typedef TDS_UINT8 TDS_BIGDATETIME;
 #define TDS_INFO_TOKEN            171	/* 0xAB                              */
 #define TDS_PARAM_TOKEN           172	/* 0xAC    RETURNVALUE?              */
 #define TDS_LOGINACK_TOKEN        173	/* 0xAD                              */
-#define TDS_CONTROL_FEATUREEXTACK_TOKEN \
-				  174	/* 0xAE    TDS_CONTROL/TDS_FEATUREEXTACK */
+#define TDS_CONTROL_TOKEN         174	/* 0xAE    TDS_CONTROL               */
 #define TDS_ROW_TOKEN             209	/* 0xD1                              */
-#define TDS_NBC_ROW_TOKEN         210	/* 0xD2    as of TDS 7.3.B           */
+#define TDS_NBC_ROW_TOKEN         210	/* 0xD2    as of TDS 7.3.B           */ /* not implemented */
 #define TDS_CMP_ROW_TOKEN         211	/* 0xD3                              */
 #define TDS5_PARAMS_TOKEN         215	/* 0xD7    TDS 5.0 only              */
 #define TDS_CAPABILITY_TOKEN      226	/* 0xE2                              */
 #define TDS_ENVCHANGE_TOKEN       227	/* 0xE3                              */
-#define TDS_SESSIONSTATE_TOKEN    228	/* 0xE4    TDS 7.4                   */
 #define TDS_EED_TOKEN             229	/* 0xE5                              */
-#define TDS_DBRPC_TOKEN           230	/* 0xE6    TDS 5.0 only              */
+#define TDS_DBRPC_TOKEN           230	/* 0xE6                              */
 #define TDS5_DYNAMIC_TOKEN        231	/* 0xE7    TDS 5.0 only              */
 #define TDS5_PARAMFMT_TOKEN       236	/* 0xEC    TDS 5.0 only              */
 #define TDS_AUTH_TOKEN            237	/* 0xED    TDS 7.0 only              */
@@ -226,8 +217,6 @@ typedef enum
 	SYBUINTN = 68,		/* 0x44 */
 	SYBUNITEXT = 174,	/* 0xAE */
 	SYBXML = 163,		/* 0xA3 */
-	SYB5BIGDATETIME = 187,	/* 0xBB */
-	SYB5BIGTIME = 188,	/* 0xBC */
 
 } TDS_SERVER_TYPE;
 
@@ -238,22 +227,22 @@ typedef enum
 } TDS_USER_TYPE;
 
 /* compute operator */
-#define SYBAOPCNT  75		/* 0x4B */
-#define SYBAOPCNTU 76		/* 0x4C, obsolete */
-#define SYBAOPSUM  77		/* 0x4D */
-#define SYBAOPSUMU 78		/* 0x4E, obsolete */
-#define SYBAOPAVG  79		/* 0x4F */
-#define SYBAOPAVGU 80		/* 0x50, obsolete */
-#define SYBAOPMIN  81		/* 0x51 */
-#define SYBAOPMAX  82		/* 0x52 */
+#define SYBAOPCNT  0x4b
+#define SYBAOPCNTU 0x4c
+#define SYBAOPSUM  0x4d
+#define SYBAOPSUMU 0x4e
+#define SYBAOPAVG  0x4f
+#define SYBAOPAVGU 0x50
+#define SYBAOPMIN  0x51
+#define SYBAOPMAX  0x52
 
 /* mssql2k compute operator */
-#define SYBAOPCNT_BIG		9	/* 0x09 */
-#define SYBAOPSTDEV		48	/* 0x30 */
-#define SYBAOPSTDEVP		49	/* 0x31 */
-#define SYBAOPVAR		50	/* 0x32 */
-#define SYBAOPVARP		51	/* 0x33 */
-#define SYBAOPCHECKSUM_AGG	114	/* 0x72 */
+#define SYBAOPCNT_BIG		0x09
+#define SYBAOPSTDEV		0x30
+#define SYBAOPSTDEVP		0x31
+#define SYBAOPVAR		0x32
+#define SYBAOPVARP		0x33
+#define SYBAOPCHECKSUM_AGG	0x72
 
 /** 
  * options that can be sent with a TDS_OPTIONCMD token
@@ -320,10 +309,7 @@ enum TDS_OPT_DATEFORMAT_CHOICE
 };
 enum TDS_OPT_ISOLATION_CHOICE
 {
-	TDS_OPT_LEVEL0 = 0,
-	TDS_OPT_LEVEL1 = 1,
-	TDS_OPT_LEVEL2 = 2,
-	TDS_OPT_LEVEL3 = 3
+	TDS_OPT_LEVEL1 = 1, TDS_OPT_LEVEL3 = 3
 };
 
 
@@ -418,18 +404,13 @@ enum option_flag2_values {
 	TDS_INTEGRATED_SECURITY_ON	= 0x80
 };
 
-enum option_flag3_values {
+enum option_flag3_values {	/* TDS 7.3+ */
 	TDS_RESTRICTED_COLLATION	= 0, 
-	TDS_CHANGE_PASSWORD		= 0x01, /* TDS 7.2 */
-	TDS_SEND_YUKON_BINARY_XML	= 0x02, /* TDS 7.2 */
-	TDS_REQUEST_USER_INSTANCE	= 0x04, /* TDS 7.2 */
-	TDS_UNKNOWN_COLLATION_HANDLING	= 0x08, /* TDS 7.3 */
-	TDS_EXTENSION			= 0x10, /* TDS 7.4 */
-};
-
-enum type_flags {
-	TDS_OLEDB_ON	= 0x10,
-	TDS_READONLY_INTENT	= 0x20,
+	TDS_CHANGE_PASSWORD		= 0x01, 
+	TDS_SEND_YUKON_BINARY_XML	= 0x02, 
+	TDS_REQUEST_USER_INSTANCE	= 0x04, 
+	TDS_UNKNOWN_COLLATION_HANDLING	= 0x08, 
+	TDS_ANY_COLLATION		= 0x10
 };
 
 /* Sybase dynamic types */
@@ -468,13 +449,3 @@ enum {
 #define TDS_PROGNLEN 10	/* maximum program lenght */
 #define TDS_PKTLEN 6	/* maximum packet lenght in login */
 
-/* TDS 5 login security flags */
-enum {
-	TDS5_SEC_LOG_ENCRYPT = 1,
-	TDS5_SEC_LOG_CHALLENGE = 2,
-	TDS5_SEC_LOG_LABELS = 4,
-	TDS5_SEC_LOG_APPDEFINED = 8,
-	TDS5_SEC_LOG_SECSESS = 16,
-	TDS5_SEC_LOG_ENCRYPT2 = 32,
-	TDS5_SEC_LOG_NONCE = 128
-};

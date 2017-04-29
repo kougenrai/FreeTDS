@@ -30,7 +30,9 @@
 #include <freetds/server.h>
 #include <freetds/string.h>
 #include <freetds/data.h>
-#include <freetds/bytes.h>
+
+static char software_version[] = "$Id: server.c,v 1.29 2011-05-16 08:51:40 freddy77 Exp $";
+static void *no_unused_var_warn[] = { software_version, no_unused_var_warn };
 
 void
 tds_env_change(TDSSOCKET * tds, int type, const char *oldvalue, const char *newvalue)
@@ -55,8 +57,7 @@ tds_env_change(TDSSOCKET * tds, int type, const char *oldvalue, const char *newv
 	case TDS_ENV_CHARSET:
 		tds_put_byte(tds, TDS_ENVCHANGE_TOKEN);
 		/* totsize = type + newlen + newvalue + oldlen + oldvalue  */
-		/* FIXME ucs2 */
-		totsize = (IS_TDS7_PLUS(tds->conn) ? 2 : 1) * (strlen(oldvalue) + strlen(newvalue)) + 3;
+		totsize = strlen(oldvalue) + strlen(newvalue) + 3;
 		tds_put_smallint(tds, totsize);
 		tds_put_byte(tds, type);
 		tds_put_byte(tds, strlen(newvalue));
@@ -127,8 +128,8 @@ tds_send_msg(TDSSOCKET * tds, int msgno, int msgstate, int severity,
 		+ 1		/* msg state */
 		+ 1		/* severity  */
 		/* FIXME ucs2 */
-		+ 4 + (IS_TDS7_PLUS(tds->conn) ? 2 : 1) * (strlen(msgtext) + strlen(srvname) + len)
-		+ (IS_TDS72_PLUS(tds->conn) ? 4 : 2);	/* line number */
+		+ (IS_TDS7_PLUS(tds->conn) ? 2 : 1) * (strlen(msgtext) + 1 + strlen(srvname) + 1 + len)
+		+ 1 + 2;	/* line number */
 	tds_put_smallint(tds, msgsz);
 	tds_put_int(tds, msgno);
 	tds_put_byte(tds, msgstate);
@@ -146,10 +147,7 @@ tds_send_msg(TDSSOCKET * tds, int msgno, int msgstate, int severity,
 	} else {
 		tds_put_byte(tds, 0);
 	}
-	if (IS_TDS72_PLUS(tds->conn))
-		tds_put_int(tds, line);
-	else
-		tds_put_smallint(tds, line);
+	tds_put_smallint(tds, line);
 }
 
 void
@@ -161,36 +159,27 @@ tds_send_err(TDSSOCKET * tds, int severity, int dberr, int oserr, char *dberrstr
 void
 tds_send_login_ack(TDSSOCKET * tds, const char *progname)
 {
-	TDS_UINT ui, version;
-
 	tds_put_byte(tds, TDS_LOGINACK_TOKEN);
 	tds_put_smallint(tds, 10 + (IS_TDS7_PLUS(tds->conn)? 2 : 1) * strlen(progname));	/* length of message */
 	if (IS_TDS50(tds->conn)) {
 		tds_put_byte(tds, 5);
-		version = 0x05000000u;
+		tds_put_byte(tds, 5);
+		tds_put_byte(tds, 0);
 	} else {
 		tds_put_byte(tds, 1);
-		/* see src/tds/token.c */
-		if (IS_TDS73_PLUS(tds->conn)) {
-			version = 0x730B0003u;
-		} else if (IS_TDS72_PLUS(tds->conn)) {
-			version = 0x72090002u;
-		} else if (IS_TDS71_PLUS(tds->conn)) {
-			version = tds->conn->tds71rev1 ? 0x07010000u : 0x71000001u;
-		} else {
-			version = (TDS_MAJOR(tds->conn) << 24) | (TDS_MINOR(tds->conn) << 16);
-		}
+		tds_put_byte(tds, TDS_MAJOR(tds->conn));
+		tds_put_byte(tds, TDS_MINOR(tds->conn));
 	}
-	TDS_PUT_A4BE(&ui, version);
-	tds_put_n(tds, &ui, 4);
-
+	tds_put_byte(tds, 0);	/* unknown */
+	tds_put_byte(tds, 0);	/* unknown */
 	tds_put_byte(tds, strlen(progname));
 	/* FIXME ucs2 */
 	tds_put_string(tds, progname, strlen(progname));
-
-	/* server version, always big endian */
-	TDS_PUT_A4BE(&ui, tds->conn->product_version & 0x7fffffffu);
-	tds_put_n(tds, &ui, 4);
+	/* server version, for mssql 1.0.1 */
+	tds_put_byte(tds, 1);	/* unknown */
+	tds_put_byte(tds, 0);	/* unknown */
+	tds_put_byte(tds, 0);	/* unknown */
+	tds_put_byte(tds, 1);	/* unknown */
 }
 
 void
@@ -259,7 +248,7 @@ tds_send_control_token(TDSSOCKET * tds, TDS_SMALLINT numcols)
 {
 	int i;
 
-	tds_put_byte(tds, TDS_CONTROL_FEATUREEXTACK_TOKEN);
+	tds_put_byte(tds, TDS_CONTROL_TOKEN);
 	tds_put_smallint(tds, numcols);
 	for (i = 0; i < numcols; i++) {
 		tds_put_byte(tds, 0);

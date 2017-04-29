@@ -25,9 +25,9 @@ TESTS		=	\
 			cursor6$(EXEEXT) cursor7$(EXEEXT) utf8$(EXEEXT) utf8_2$(EXEEXT) \
 			stats$(EXEEXT) descrec$(EXEEXT) peter$(EXEEXT) test64$(EXEEXT) \
 			prepare_warn$(EXEEXT) long_error$(EXEEXT) mars1$(EXEEXT) \
-			array_error$(EXEEXT) describecol2$(EXEEXT) closestmt$(EXEEXT) bcp$(EXEEXT)
+			array_error$(EXEEXT) describecol2$(EXEEXT) closestmt$(EXEEXT)
 
-check_PROGRAMS	=	$(TESTS) oldpwd$(EXEEXT)
+check_PROGRAMS	=	$(TESTS)
 
 t0001_SOURCES	=	t0001.c common.c common.h
 t0002_SOURCES	=	t0002.c common.c common.h
@@ -103,8 +103,6 @@ long_error_SOURCES = long_error.c common.c common.h
 mars1_SOURCES = mars1.c common.c common.h
 array_error_SOURCES = array_error.c common.c common.h
 closestmt_SOURCES = closestmt.c common.c common.h
-oldpwd_SOURCES = oldpwd.c common.c common.h
-bcp_SOURCES = bcp.c common.c common.h
 
 GLOBAL_CPPFLAGS	=	-I$(top_srcdir)/include $(ODBC_INC) -DFREETDS_TOPDIR=\"$(top_srcdir)\"
 if ODBC_WIDE_TESTS
@@ -114,15 +112,13 @@ AM_CPPFLAGS	=	$(GLOBAL_CPPFLAGS)
 endif
 # this test cannot work using wide characters as use UTF-8 and single byte encoding
 utf8_CPPFLAGS	=	$(GLOBAL_CPPFLAGS)
-oldpwd_CPPFLAGS	=	$(GLOBAL_CPPFLAGS)
 
-LIBS		=	$(ODBCLIB) $(ODBCNODMLIB) ../../replacements/libreplacements.la $(NETWORK_LIBS)
 if MINGW32
 AM_LDFLAGS	=	-no-fast-install
-LIBS		+=      $(ODBCINSTLIB)
 else
 AM_LDFLAGS	=	-no-install -L../.libs -R $(abs_builddir)/../.libs
 endif
+LIBS		=	$(ODBCLIB) $(ODBCNODMLIB) ../../replacements/libreplacements.la @NETWORK_LIBS@
 DISTCLEANFILES	=	odbc.ini odbcinst.ini
 EXTRA_DIST	=	data.in describecol.in attributes.in CMakeLists.txt
 

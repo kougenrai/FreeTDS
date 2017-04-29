@@ -4,34 +4,34 @@ AM_CPPFLAGS	=	-I$(top_srcdir)/include $(ODBC_INC)
 
 lib_LTLIBRARIES	=	libtdsodbc.la
 ##EXTRA_LTLIBRARIES	=	libtdsodbc.la
-libtdsodbc_la_SOURCES =	odbc.c connectparams.c convert_tds2sql.c \
-	descriptor.c prepare_query.c odbc_util.c bcp.c \
-	native.c sql2tds.c error.c odbc_checks.c sqlwchar.c sqlwparams.h \
-	odbc_export.h error_export.h odbc_data.c
-libtdsodbc_la_LIBADD =	../tds/libtds.la ../replacements/libreplacements.la $(ODBCINSTLIB) $(LTLIBICONV) $(FREETDS_LIBGCC)
-# -module is needed by Darwin (Mac OS X)
-libtdsodbc_la_LDFLAGS = $(FREETDS_SYMBOLIC) $(FREETDS_ODBC_MODULE)
-
 if MINGW32
-libtdsodbc_la_SOURCES += winlogin.c winsetup.c winmain.c
+MINGW_SOURCES	= ../../win32/winlogin.c ../../win32/winsetup.c ../../win32/initnet.c
+else
+MINGW_SOURCES	=
 endif
-
+libtdsodbc_la_SOURCES=	odbc.c connectparams.c convert_tds2sql.c \
+	descriptor.c prepare_query.c odbc_util.c \
+	native.c sql2tds.c error.c odbc_checks.c sqlwchar.c sqlwparams.h \
+	odbc_export.h error_export.h odbc_data.c $(MINGW_SOURCES)
 if MINGW32
-libtdsodbc_la_LIBADD +=	setup.res
-libtdsodbc_la_LDFLAGS += -Wl,--kill-at -Wl,--enable-stdcall-fixup -Wl,-s -Wl,odbc_w.def -Wl,setup.res
+libtdsodbc_la_LIBADD=	../../win32/setup.res ../tds/libtds.la ../replacements/libreplacements.la $(ODBCINSTLIB) \
+	$(NETWORK_LIBS) $(LTLIBICONV) $(FREETDS_LIBGCC)
+libtdsodbc_la_LDFLAGS = -Wl,--kill-at -Wl,--enable-stdcall-fixup -Wl,-s -Wl,$(top_srcdir)/win32/FreeTDS.def -Wl,../../win32/setup.res $(FREETDS_SYMBOLIC)
 
 .rc.res:
-	$(RC) -i $< --input-format=rc -o $@ -O coff
+	$(RC) -i $< -I $(top_builddir)/win32 --input-format=rc -o $@ -O coff
 else
-if !MACOSX
-libtdsodbc_la_LDFLAGS += -export-symbols-regex '^(SQL|ODBCINST).*'
+libtdsodbc_la_LIBADD=	../tds/libtds.la ../replacements/libreplacements.la $(ODBCINSTLIB) $(NETWORK_LIBS) $(LTLIBICONV) $(FREETDS_LIBGCC)
+if MACOSX
+SYMBOLS		=
+else
+SYMBOLS		=	-export-symbols-regex '^(SQL|ODBCINST).*'
 endif
+# -module is needed by Darwin (Mac OS X)
+libtdsodbc_la_LDFLAGS = $(SYMBOLS) $(FREETDS_SYMBOLIC) $(FREETDS_ODBC_MODULE)
 endif
 
-EXTRA_DIST = CMakeLists.txt winmain.c winlogin.c winsetup.c \
-	     version.rc version.rc.in setup.rc resource.h \
-	     odbc.def odbc_w.def
-CLEANFILES = setup.res
+EXTRA_DIST = CMakeLists.txt
 
 ## Need blank statement to avoid compiling odbc.c
 odbc: $(EXTRA_LTLIBRARIES)

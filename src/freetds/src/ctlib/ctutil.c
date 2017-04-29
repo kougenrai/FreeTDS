@@ -31,6 +31,8 @@
 /* #include "fortify.h" */
 
 
+TDS_RCSID(var, "$Id: ctutil.c,v 1.38 2011-06-18 17:52:24 freddy77 Exp $");
+
 /*
  * test include consistency 
  * I don't think all compiler are able to compile this code... if not comment it
@@ -91,8 +93,8 @@ _ct_handle_client_message(const TDSCONTEXT * ctx_tds, TDSSOCKET * tds, TDSMESSAG
 
 	memset(&errmsg, '\0', sizeof(errmsg));
 	errmsg.msgnumber = msg->msgno;
-	strlcpy(errmsg.msgstring, msg->message, sizeof(errmsg.msgstring));
-	errmsg.msgstringlen = strlen(errmsg.msgstring);
+	strcpy(errmsg.msgstring, msg->message);
+	errmsg.msgstringlen = strlen(msg->message);
 	errmsg.osstring[0] = '\0';
 	errmsg.osstringlen = 0;
 	/* if there is no connection, attempt to call the context handler */
@@ -144,22 +146,22 @@ _ct_handle_server_message(const TDSCONTEXT * ctx_tds, TDSSOCKET * tds, TDSMESSAG
 
 	memset(&errmsg, '\0', sizeof(errmsg));
 	errmsg.msgnumber = msg->msgno;
-	strlcpy(errmsg.text, msg->message, sizeof(errmsg.text));
+	tds_strlcpy(errmsg.text, msg->message, sizeof(errmsg.text));
 	errmsg.textlen = strlen(errmsg.text);
 	errmsg.sqlstate[0] = 0;
 	if (msg->sql_state)
-		strlcpy((char *) errmsg.sqlstate, msg->sql_state, sizeof(errmsg.sqlstate));
+		tds_strlcpy((char *) errmsg.sqlstate, msg->sql_state, sizeof(errmsg.sqlstate));
 	errmsg.sqlstatelen = strlen((char *) errmsg.sqlstate);
 	errmsg.state = msg->state;
 	errmsg.severity = msg->severity;
 	errmsg.line = msg->line_number;
 	if (msg->server) {
 		errmsg.svrnlen = strlen(msg->server);
-		strlcpy(errmsg.svrname, msg->server, CS_MAX_NAME);
+		tds_strlcpy(errmsg.svrname, msg->server, CS_MAX_NAME);
 	}
 	if (msg->proc_name) {
 		errmsg.proclen = strlen(msg->proc_name);
-		strlcpy(errmsg.proc, msg->proc_name, CS_MAX_NAME);
+		tds_strlcpy(errmsg.proc, msg->proc_name, CS_MAX_NAME);
 	}
 	/* if there is no connection, attempt to call the context handler */
 	if (!con) {

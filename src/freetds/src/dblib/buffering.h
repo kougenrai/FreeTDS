@@ -239,13 +239,10 @@ buffer_idx2row(const DBPROC_ROWBUF *buf, int idx)
 static int
 buffer_row2idx(const DBPROC_ROWBUF *buf, int row_number)
 {
-	int i = buf->tail;
-#ifndef NDEBUG
-	int ii = 0;
-#endif
+	int i, ii, idx = -1;
 
 	BUFFER_CHECK(buf);
-	if (i == buf->capacity) {
+	if (buf->tail == buf->capacity) {
 		assert (buf->head == 0);
 		return -1;	/* no rows buffered */
 	}
@@ -254,16 +251,15 @@ buffer_row2idx(const DBPROC_ROWBUF *buf, int row_number)
 	 * March through the buffers from tail to head, stop if we find our row.  
 	 * A full queue is indicated by tail == head (which means we can't write).
 	 */
-	do {
-		if (buffer_idx2row(buf, i) == row_number)
-			return i;
-
+	for (ii=0, i = buf->tail; i != buf->head || ii == 0; i = buffer_idx_increment(buf, i)) {
+		if( buffer_idx2row(buf, i) == row_number) {
+			idx = i;
+			break;
+		}
 		assert(ii++ < buf->capacity); /* prevent infinite loop */
-
-		i = buffer_idx_increment(buf, i);
-	} while (i != buf->head);
+	} 
 	
-	return -1;
+	return idx;
 }
 
 /**
@@ -314,7 +310,7 @@ buffer_transfer_bound_data(DBPROC_ROWBUF *buf, TDS_INT res_type, TDS_INT compute
 	assert(row->resinfo);
 
 	for (i = 0; i < row->resinfo->num_cols; i++) {
-		TDS_SERVER_TYPE srctype;
+		int srctype;
 		DBINT srclen;
 		TDSCOLUMN *curcol = row->resinfo->columns[i];
 
@@ -466,7 +462,7 @@ buffer_alloc(DBPROCESS *dbproc)
 	assert(buf->capacity > 0);
 	assert(buf->rows == NULL);
 	
-	buf->rows = tds_new0(DBLIB_BUFFER_ROW, buf->capacity);
+	buf->rows = (DBLIB_BUFFER_ROW *) calloc(buf->capacity, sizeof(DBLIB_BUFFER_ROW));
 	
 	assert(buf->rows);
 	
@@ -504,7 +500,7 @@ buffer_add_row(DBPROCESS *dbproc, TDSRESULTINFO *resinfo)
 	row->row_data = NULL;
 	if (row->sizes)
 		free(row->sizes);
-	row->sizes = tds_new0(TDS_INT, resinfo->num_cols);
+	row->sizes = (TDS_INT *) calloc(resinfo->num_cols, sizeof(TDS_INT));
 	for (i = 0; i < resinfo->num_cols; ++i)
 		row->sizes[i] = resinfo->columns[i]->column_cur_size;
 
